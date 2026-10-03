@@ -37,11 +37,35 @@ Home Screen, works offline, and creates PDF reports. Data stays on your phone.
 - Every expense is counted against his balance unless you set **Paid by** to **Me directly** on that expense.
 - The Statement shows each transfer and expense with the running balance. PDF reports include it, with opening and closing balance for the chosen period.
 
+## Sync across iPhone, iPad and Mac
+
+Your data is saved to a private file (a "secret gist") in your own GitHub account, and every device you connect shows the same data.
+
+**Create the token (once, on the Mac is easiest)**
+1. Go to github.com, tap your photo, then **Settings**.
+2. Scroll down to **Developer settings**, then **Personal access tokens**, then **Tokens (classic)**.
+3. Tap **Generate new token**, then **Generate new token (classic)**.
+4. Note: `Site Ledger`. Expiration: **No expiration** (or 1 year, if you prefer to renew).
+5. Under scopes, tick **only `gist`**. Nothing else.
+6. Tap **Generate token** and copy it (starts with `ghp_`). GitHub shows it only once, so keep it in your Notes or password manager.
+
+**Connect each device**
+1. Open the app, tap the **settings gear**.
+2. Under **Sync across devices**, paste the token and tap **Connect**.
+3. The first device uploads its data. Every later device downloads it and merges anything it already had.
+
+**After that**
+- Changes sync by themselves about a second after you save, and whenever you open the app.
+- The line under the project name shows **Synced** with the time. If it shows **Not synced**, tap it to retry. Changes made offline sync when you are back online.
+- Deletions sync too.
+- If a phone is lost, delete the token on GitHub (same Tokens page). Your data stays in GitHub; make a new token for your other devices.
+- Do not edit or delete the gist named "Site Ledger data" on GitHub.
+
 ## Backups (important)
 
-Data lives only in this app on this phone. Export a backup file from the settings
-gear every week or after big entries, and keep it in iCloud Drive. If you delete
-the Home Screen app, its data is deleted too.
+With sync on, your data is safe in GitHub. Still export a backup file now and then
+and keep it in iCloud Drive. Without sync, data lives only on that device, and
+deleting the Home Screen app deletes it too.
 
 ## Updating the app later
 

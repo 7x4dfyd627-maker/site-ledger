@@ -180,13 +180,20 @@ label.f input.amount{height:60px;font-family:var(--cond);font-weight:700;font-si
 .setup .btn{flex:0 0 auto;padding:0 18px;height:46px}
 .pos{color:var(--ok)} .negc{color:var(--danger)}
 table.mini td.sub{font-size:.8rem;color:var(--muted)}
+.syncline{margin:3px 0 0;font-size:.8rem;color:var(--muted);background:none;border:0;padding:0;display:inline-flex;align-items:center;gap:5px}
+.syncline i{width:7px;height:7px;border-radius:50%;background:var(--muted)}
+.syncline.ok i{background:var(--ok)} .syncline.err{color:var(--danger)} .syncline.err i{background:var(--danger)}
+.syncbox{margin-top:18px;padding:14px;border:1px solid var(--line);border-radius:12px;background:var(--bg)}
+.syncbox h3{margin:0 0 4px;font-family:var(--cond);font-size:1.2rem}
+.syncbox p{margin:4px 0;font-size:.88rem;color:var(--muted)}
+.syncbox .actions{margin-top:10px}
 [hidden]{display:none!important}
 </style>
 </head>
 <body>
 <div class="wrap">
   <header class="top">
-    <div class="title"><h1 id="projName">House D-18</h1><p id="projSub">Construction ledger</p></div>
+    <div class="title"><h1 id="projName">House D-18</h1><p id="projSub">Construction ledger</p><button class="syncline" id="syncLine" hidden><i></i><span></span></button></div>
     <div class="top-actions">
       <button class="icon-btn" id="btnReport" aria-label="Create PDF report">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 3H6a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8z"/><path d="M14 3v5h5M9 13h6M9 17h6"/></svg>PDF</button>
@@ -332,6 +339,19 @@ table.mini td.sub{font-size:.8rem;color:var(--muted)}
     <label class="f">Person you send money to<input id="sAgent" autocomplete="off" placeholder="e.g. Waqas"></label>
     <label class="f">Extra categories (comma separated)<input id="sCats" autocomplete="off" placeholder="e.g. Tiles, Paint"></label>
     <div class="actions"><button type="submit" class="btn primary">Save settings</button></div>
+    <div class="syncbox" id="syncBox">
+      <h3>Sync across devices</h3>
+      <div id="syncOff">
+        <p>Paste your GitHub token (gist scope) to keep the same data on your iPhone, iPad and Mac. Do this once on each device.</p>
+        <label class="f" style="margin-top:8px">GitHub token<input id="syncToken" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="ghp_..."></label>
+        <div class="hint" id="syncErr" style="color:var(--danger)"></div>
+        <div class="actions"><button type="button" class="btn primary" id="btnConnect">Connect</button></div>
+      </div>
+      <div id="syncOn" hidden>
+        <p id="syncInfo"></p>
+        <div class="actions"><button type="button" class="btn" id="btnDisconnect">Disconnect this device</button><button type="button" class="btn primary" id="btnSyncNow">Sync now</button></div>
+      </div>
+    </div>
     <div class="menu-list" style="margin-top:14px">
       <button type="button" id="btnExport">Export backup file</button>
       <button type="button" id="btnImport">Import backup file</button>
@@ -390,13 +410,15 @@ function normalise(s) {
   return {
     settings: Object.assign({project: 'House D-18', subtitle: 'Construction ledger', budget: 0, extraCats: [], agent: ''}, s.settings || {}),
     transfers: (s.transfers || []).filter(t => t && t.date && isFinite(+t.amount)).map(t => ({...t, amount: +t.amount, id: t.id || uid()})),
-    entries: (s.entries || []).filter(e => e && e.date && isFinite(+e.amount)).map(e => ({...e, amount: +e.amount, id: e.id || uid(), paidBy: e.paidBy === 'self' ? 'self' : 'agent'}))
+    entries: (s.entries || []).filter(e => e && e.date && isFinite(+e.amount)).map(e => ({...e, amount: +e.amount, id: e.id || uid(), paidBy: e.paidBy === 'self' ? 'self' : 'agent'})),
+    deleted: (s.deleted && typeof s.deleted === 'object') ? {...s.deleted} : {}
   };
 }
-function save() {
+function writeLocal() {
   try { localStorage.setItem(KEY, JSON.stringify(state)); }
   catch (e) { toast('Could not save on this device. Export a backup now.'); }
 }
+function save() { writeLocal(); if (sync.gistId) scheduleSync(); }
 if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
 
 function categories() {
@@ -527,7 +549,7 @@ function renderFunds() {
     card.innerHTML = `<div class="l">Who do you send money to for these expenses?</div>
       <div class="setup"><input id="agentIn" placeholder="e.g. Waqas" autocomplete="off"><button class="btn primary" id="agentSave">Save</button></div>
       <div class="why">His balance is money you sent minus expenses he paid.</div>`;
-    $('#agentSave').onclick = () => { const v = $('#agentIn').value.trim(); if (!v) return; state.settings.agent = v; save(); render(); };
+    $('#agentSave').onclick = () => { const v = $('#agentIn').value.trim(); if (!v) return; state.settings.agent = v; state.settings.updated = Date.now(); save(); render(); };
   } else {
     const why = !state.transfers.length ? 'Record the money you send, and his balance appears here.'
       : F.bal >= 0 ? `${name} should have this amount left from the money you sent.`
@@ -630,7 +652,7 @@ $('#entryForm').addEventListener('submit', ev => {
   const qtyRaw = $('#fQty').value.trim(), qty = qtyRaw ? parseAmount(qtyRaw) : '';
   const err = !(amount > 0) ? 'Enter an amount above zero.' : !desc ? 'Add a short description.' : !date ? 'Pick a date.' : (qtyRaw && !(qty > 0)) ? 'Quantity must be a number.' : '';
   if (err) { $('#formErr').textContent = err; return; }
-  const rec = {id: editingId || uid(), date, desc, amount, cat: $('#fCat').value, payee: $('#fPayee').value.trim(),
+  const rec = {id: editingId || uid(), updated: Date.now(), date, desc, amount, cat: $('#fCat').value, payee: $('#fPayee').value.trim(),
     method: $('#fMethod').value, ref: $('#fRef').value.trim(), note: $('#fNote').value.trim(), paidBy: $('#fPaidBy').value};
   if (qty) { rec.qty = qty; rec.unit = $('#fUnit').value.trim(); }
   const i = state.entries.findIndex(x => x.id === editingId);
@@ -642,7 +664,7 @@ $('#entryForm').addEventListener('submit', ev => {
 $('#btnDelete').addEventListener('click', () => {
   const e = state.entries.find(x => x.id === editingId); if (!e) return;
   if (!confirm(`Delete "${e.desc}" (PKR ${fmt2(e.amount)})?`)) return;
-  state.entries = state.entries.filter(x => x.id !== editingId); save(); $('#dlgEntry').close(); render(); toast('Expense deleted');
+  state.entries = state.entries.filter(x => x.id !== editingId); state.deleted[editingId] = Date.now(); save(); $('#dlgEntry').close(); render(); toast('Expense deleted');
 });
 
 /* ---------- Money sent ---------- */
@@ -671,7 +693,7 @@ $('#fundsForm').addEventListener('submit', ev => {
   const amount = parseAmount($('#tAmount').value), date = $('#tDate').value, aedRaw = $('#tAed').value.trim(), aed = aedRaw ? parseAmount(aedRaw) : 0;
   const err = !(amount > 0) ? 'Enter the PKR amount above zero.' : !date ? 'Pick a date.' : (aedRaw && !(aed > 0)) ? 'AED amount must be a number.' : '';
   if (err) { $('#tErr').textContent = err; return; }
-  const rec = {id: editingT || uid(), date, amount, aed: aed || undefined, method: $('#tMethod').value, ref: $('#tRef').value.trim(), note: $('#tNote').value.trim()};
+  const rec = {id: editingT || uid(), updated: Date.now(), date, amount, aed: aed || undefined, method: $('#tMethod').value, ref: $('#tRef').value.trim(), note: $('#tNote').value.trim()};
   const i = state.transfers.findIndex(x => x.id === editingT);
   if (i >= 0) state.transfers[i] = {...state.transfers[i], ...rec}; else state.transfers.push({...rec, created: Date.now()});
   save(); $('#dlgFunds').close(); render(); toast(i >= 0 ? 'Changes saved' : `Recorded PKR ${fmt2(amount)} sent`);
@@ -679,7 +701,7 @@ $('#fundsForm').addEventListener('submit', ev => {
 $('#tDelete').addEventListener('click', () => {
   const t = state.transfers.find(x => x.id === editingT); if (!t) return;
   if (!confirm(`Delete money sent on ${nice(t.date)} (PKR ${fmt2(t.amount)})?`)) return;
-  state.transfers = state.transfers.filter(x => x.id !== editingT); save(); $('#dlgFunds').close(); render(); toast('Entry deleted');
+  state.transfers = state.transfers.filter(x => x.id !== editingT); state.deleted[editingT] = Date.now(); save(); $('#dlgFunds').close(); render(); toast('Entry deleted');
 });
 $('#tlist').addEventListener('click', e => { const r = e.target.closest('[data-tid]'); if (r) openTransfer(r.dataset.tid); });
 
@@ -857,7 +879,7 @@ function openMenu() {
   const S = state.settings;
   $('#sName').value = S.project || ''; $('#sSub').value = S.subtitle || '';
   $('#sBudget').value = S.budget ? fmt(S.budget) : ''; $('#sCats').value = (S.extraCats || []).join(', '); $('#sAgent').value = S.agent || '';
-  budgetHint(); $('#dlgMenu').showModal();
+  budgetHint(); renderSyncBox(); $('#dlgMenu').showModal();
 }
 function budgetHint() { const r = $('#sBudget').value, v = parseAmount(r); $('#budgetHint').textContent = !r ? 'Leave empty for no budget' : isFinite(v) ? `PKR ${fmt(v)}` : 'Use digits, optionally ending in lakh or crore'; }
 $('#sBudget').addEventListener('input', budgetHint);
@@ -866,11 +888,11 @@ $('#menuForm').addEventListener('submit', ev => {
   const b = $('#sBudget').value.trim() ? parseAmount($('#sBudget').value) : 0;
   if (!isFinite(b)) { budgetHint(); return; }
   Object.assign(state.settings, {project: $('#sName').value.trim() || 'Untitled project', subtitle: $('#sSub').value.trim(), budget: b,
-    extraCats: $('#sCats').value.split(',').map(s => s.trim()).filter(Boolean), agent: $('#sAgent').value.trim()});
+    extraCats: $('#sCats').value.split(',').map(s => s.trim()).filter(Boolean), agent: $('#sAgent').value.trim(), updated: Date.now()});
   save(); $('#dlgMenu').close(); render(); toast('Settings saved');
 });
 $('#btnExport').addEventListener('click', () => {
-  const data = {app: 'site-ledger', version: 1, exported: new Date().toISOString(), settings: state.settings, entries: state.entries, transfers: state.transfers};
+  const data = {...payload(state), exported: new Date().toISOString()};
   deliver(new Blob([JSON.stringify(data, null, 1)], {type: 'application/json'}), `${(state.settings.project || 'project').replace(/[^\w-]+/g, '-')}-backup-${today()}.json`, 'application/json');
 });
 $('#btnCsv').addEventListener('click', () => {
@@ -900,10 +922,118 @@ $('#fileIn').addEventListener('change', async ev => {
   } catch (e) { toast('That file is not a Site Ledger backup (' + e.message + ')'); }
 });
 $('#btnWipe').addEventListener('click', () => {
-  if (!confirm('Erase every expense and money-sent record on this device? Export a backup first if you might need it.')) return;
+  const hadSync = !!sync.gistId;
+  if (!confirm(hadSync ? 'Erase all data on this device and disconnect sync? Your data stays safe in GitHub and comes back when you reconnect.' : 'Erase every expense and money-sent record on this device? Export a backup first if you might need it.')) return;
   if (prompt('Type ERASE to confirm') !== 'ERASE') return;
-  state = normalise({}); save(); $('#dlgMenu').close(); render(); toast('All data erased');
+  state = normalise({}); sync = {}; saveSync(); writeLocal(); $('#dlgMenu').close(); render(); toast(hadSync ? 'Erased on this device. Your GitHub copy is untouched.' : 'All data erased');
 });
+
+/* ---------- Sync (private GitHub Gist) ---------- */
+const SKEY = 'site-ledger.sync', GFILE = 'site-ledger.json';
+let sync = (() => { try { return JSON.parse(localStorage.getItem(SKEY)) || {}; } catch (e) { return {}; } })();
+function saveSync() { try { localStorage.setItem(SKEY, JSON.stringify(sync)); } catch (e) {} }
+function payload(d) { return {app: 'site-ledger', version: 2, settings: d.settings, entries: d.entries, transfers: d.transfers, deleted: d.deleted}; }
+const byId = (a, b) => String(a.id).localeCompare(String(b.id));
+function canon(d) {
+  const del = Object.keys(d.deleted || {}).sort().map(k => [k, d.deleted[k]]);
+  const st = Object.keys(d.settings).sort().map(k => [k, d.settings[k]]);
+  return JSON.stringify([st, [...d.entries].sort(byId), [...d.transfers].sort(byId), del]);
+}
+function mergeData(a, b) {
+  const deleted = {...a.deleted};
+  for (const k in b.deleted) deleted[k] = Math.max(deleted[k] || 0, b.deleted[k]);
+  const pick = (x, y) => {
+    const m = new Map(x.map(r => [r.id, r]));
+    y.forEach(r => { const o = m.get(r.id); if (!o || (r.updated || 0) > (o.updated || 0)) m.set(r.id, r); });
+    return [...m.values()].filter(r => !(deleted[r.id] >= (r.updated || 0)));
+  };
+  return {settings: (b.settings.updated || 0) > (a.settings.updated || 0) ? b.settings : a.settings,
+    entries: pick(a.entries, b.entries), transfers: pick(a.transfers, b.transfers), deleted};
+}
+async function gh(path, opts = {}) {
+  let r;
+  try {
+    r = await fetch('https://api.github.com' + path, {...opts, cache: 'no-store',
+      headers: {Accept: 'application/vnd.github+json', Authorization: 'Bearer ' + sync.token, ...(opts.body ? {'Content-Type': 'application/json'} : {})}});
+  } catch (e) { throw new Error('No internet connection'); }
+  if (!r.ok) throw new Error(r.status === 401 ? 'GitHub did not accept the token' : r.status === 403 ? 'Token is missing the gist permission' : r.status === 404 ? 'Sync file not found on GitHub' : 'GitHub error ' + r.status);
+  return r.json();
+}
+async function readGist(id) {
+  const g = await gh('/gists/' + id), f = g.files && g.files[GFILE];
+  if (!f) throw new Error('Sync file not found on GitHub');
+  const text = f.truncated ? await (await fetch(f.raw_url, {cache: 'no-store'})).text() : f.content;
+  return normalise(JSON.parse(text));
+}
+const writeGist = (id, d) => gh('/gists/' + id, {method: 'PATCH', body: JSON.stringify({files: {[GFILE]: {content: JSON.stringify(payload(d))}}})});
+async function findGist() {
+  for (let p = 1; p <= 10; p++) {
+    const list = await gh(`/gists?per_page=100&page=${p}`);
+    const hit = list.find(g => g.files && g.files[GFILE]);
+    if (hit) return hit.id;
+    if (list.length < 100) return null;
+  }
+  return null;
+}
+let syncing = false, syncAgain = false, syncTimer, syncState = '';
+function scheduleSync() { clearTimeout(syncTimer); syncTimer = setTimeout(() => syncNow(false), 1200); }
+async function syncNow(manual) {
+  if (!sync.gistId) return;
+  if (syncing) { syncAgain = true; return; }
+  syncing = true; syncState = 'busy'; renderSyncLine();
+  try {
+    const remote = await readGist(sync.gistId);
+    const merged = mergeData(state, remote), cm = canon(merged);
+    if (cm !== canon(state)) { state = merged; writeLocal(); render(); }
+    if (cm !== canon(remote)) await writeGist(sync.gistId, merged);
+    sync.last = Date.now(); sync.error = ''; saveSync(); syncState = '';
+    if (manual) toast('Synced');
+  } catch (e) {
+    sync.error = e.message; saveSync(); syncState = '';
+    if (manual) toast('Sync failed: ' + e.message);
+  } finally {
+    syncing = false; renderSyncLine(); if ($('#dlgMenu').open) renderSyncBox();
+    if (syncAgain) { syncAgain = false; syncNow(false); }
+  }
+}
+const timeStr = t => { const d = new Date(t); return `${d.getDate()} ${MONTHS[d.getMonth()]}, ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; };
+function renderSyncLine() {
+  const b = $('#syncLine'); b.hidden = !sync.gistId; if (!sync.gistId) return;
+  b.className = 'syncline' + (syncState === 'busy' ? '' : sync.error ? ' err' : ' ok');
+  b.lastChild.textContent = syncState === 'busy' ? 'Syncing...' : sync.error ? `Not synced: ${sync.error}. Tap to retry` : sync.last ? `Synced ${timeStr(sync.last)}` : 'Sync on';
+}
+function renderSyncBox() {
+  $('#syncOff').hidden = !!sync.gistId; $('#syncOn').hidden = !sync.gistId;
+  $('#syncInfo').textContent = sync.gistId ? (sync.error ? `Connected, but the last sync failed: ${sync.error}.` : `Connected. Last synced ${sync.last ? timeStr(sync.last) : 'never'}.`) + ' Changes sync automatically.' : '';
+}
+$('#btnConnect').addEventListener('click', async () => {
+  const token = $('#syncToken').value.trim(); if (!token) { $('#syncErr').textContent = 'Paste your token first.'; return; }
+  const btn = $('#btnConnect'); btn.disabled = true; btn.textContent = 'Connecting...'; $('#syncErr').textContent = '';
+  sync = {token};
+  try {
+    let id = await findGist(), msg;
+    if (id) {
+      const remote = await readGist(id), merged = mergeData(state, remote);
+      state = merged; writeLocal();
+      if (canon(merged) !== canon(remote)) await writeGist(id, merged);
+      msg = `Connected. ${merged.entries.length} expenses now on this device.`;
+    } else {
+      const g = await gh('/gists', {method: 'POST', body: JSON.stringify({description: 'Site Ledger data (do not edit by hand)', public: false, files: {[GFILE]: {content: JSON.stringify(payload(state))}}})});
+      id = g.id; msg = 'Connected. Your data is now saved to GitHub.';
+    }
+    sync.gistId = id; sync.last = Date.now(); sync.error = ''; saveSync();
+    $('#syncToken').value = ''; render(); renderSyncBox(); renderSyncLine(); toast(msg);
+  } catch (e) { sync = {}; saveSync(); $('#syncErr').textContent = e.message; }
+  finally { btn.disabled = false; btn.textContent = 'Connect'; }
+});
+$('#btnSyncNow').addEventListener('click', () => syncNow(true));
+$('#btnDisconnect').addEventListener('click', () => {
+  if (!confirm('Stop syncing on this device? Data on this device stays, and your GitHub copy stays.')) return;
+  sync = {}; saveSync(); renderSyncBox(); renderSyncLine(); toast('Sync turned off on this device');
+});
+$('#syncLine').addEventListener('click', () => syncNow(true));
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') syncNow(false); });
+window.addEventListener('online', () => syncNow(false));
 
 /* ---------- Wiring ---------- */
 let tt; function toast(m) { const t = $('#toast'); t.textContent = m; t.classList.add('show'); clearTimeout(tt); tt = setTimeout(() => t.classList.remove('show'), 2600); }
@@ -922,9 +1052,9 @@ function setView(v) {
 }
 $('#tabLedger').onclick = () => setView('ledger'); $('#tabBreak').onclick = () => setView('break'); $('#tabFunds').onclick = () => setView('funds');
 $('#hero').addEventListener('click', e => { if (e.target.closest('#tape')) setView('break'); });
-render();
+render(); renderSyncLine(); syncNow(false);
 if ('serviceWorker' in navigator && location.protocol.startsWith('http')) navigator.serviceWorker.register('sw.js').catch(() => {});
-window.__ledger = {state: () => state, parseAmount};
+window.__ledger = {state: () => state, parseAmount, mergeData, canon};
 })();
 </script>
 </body>

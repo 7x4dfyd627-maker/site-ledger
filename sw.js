@@ -1,5 +1,5 @@
 // Bump VERSION whenever you change any file, so iPhones pick up the update.
-const VERSION = 'site-ledger-v2';
+const VERSION = 'site-ledger-v3';
 const ASSETS = [
   './', './index.html', './manifest.webmanifest',
   './vendor/jspdf.umd.min.js', './vendor/jspdf.plugin.autotable.min.js',
@@ -18,6 +18,7 @@ self.addEventListener('activate', e => {
 self.addEventListener('fetch', e => {
   const req = e.request;
   if (req.method !== 'GET') return;
+  if (new URL(req.url).origin !== self.location.origin) return; // never cache GitHub sync calls
   if (req.mode === 'navigate') {
     // Network first for the page so updates arrive; cached copy when offline.
     e.respondWith(fetch(req).then(r => { const c = r.clone(); caches.open(VERSION).then(x => x.put('./index.html', c)); return r; })
