@@ -79,8 +79,8 @@ header.top{display:flex;align-items:flex-start;justify-content:space-between;gap
 .stats span{font-size:.8rem;color:var(--muted)}
 
 /* Segmented */
-.seg{display:grid;grid-template-columns:repeat(3,1fr);background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:3px;margin:20px 0 12px}
-.seg button{border:0;background:transparent;border-radius:8px;height:36px;font-weight:600;color:var(--muted)}
+.seg{display:grid;grid-template-columns:repeat(4,1fr);background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:3px;margin:20px 0 12px}
+.seg button{border:0;background:transparent;border-radius:8px;height:36px;font-weight:600;color:var(--muted);font-size:.92rem;white-space:nowrap}
 .seg button[aria-selected="true"]{background:var(--ink);color:var(--bg)}
 
 /* Ledger */
@@ -129,6 +129,24 @@ table.mini td{padding:9px 0;border-bottom:1px solid var(--line);vertical-align:t
 table.mini .r{text-align:right;padding-left:10px;white-space:nowrap}
 #stmt td:first-child{white-space:nowrap;padding-right:10px}
 #stmt{font-size:.88rem}
+
+/* Stages */
+.stage{display:grid;grid-template-columns:24px 1fr;gap:10px;align-items:start;border-bottom:1px solid var(--line)}
+.stage .tick-box{width:24px;height:24px;margin-top:11px;border:1.5px solid var(--line);background:var(--bg);border-radius:7px;display:grid;place-items:center;padding:0}
+.stage .tick-box svg{width:14px;height:14px;opacity:0;color:var(--bg)}
+.stage.done .tick-box{background:var(--ok);border-color:var(--ok)}
+.stage.done .tick-box svg{opacity:1}
+.stage-main{display:grid;grid-template-columns:1fr auto;gap:4px 12px;align-items:start;width:100%;text-align:left;background:none;border:0;padding:10px 2px 11px}
+.stage .n{font-weight:500}
+.stage .u{font-size:.92rem;color:var(--muted);direction:rtl;unicode-bidi:isolate;display:block;margin-top:1px}
+.stage .m{font-size:.8rem;color:var(--muted);margin-top:3px}
+.stage .a{text-align:right;font-weight:600;white-space:nowrap}
+.stage .a small{display:block;font-weight:400;font-size:.78rem;color:var(--muted)}
+.stage .over{color:var(--danger)} .stage .under{color:var(--ok)}
+.floor-head{display:flex;justify-content:space-between;align-items:baseline;gap:10px;padding:0 2px 6px;border-bottom:2px solid var(--ink);margin-top:20px}
+.floor-head h3{margin:0;font-family:var(--cond);font-weight:600;font-size:1.2rem}
+.floor-head span{font-size:.85rem;color:var(--muted)}
+.setup-note{font-size:.9rem;color:var(--muted);margin:6px 0 0}
 
 /* FAB */
 .fab{position:fixed;right:max(16px,calc(50% - 304px));bottom:calc(18px + env(safe-area-inset-bottom,0px));height:56px;padding:0 20px;border:0;border-radius:14px;
@@ -215,6 +233,7 @@ table.mini td.sub{font-size:.8rem;color:var(--muted)}
 
   <div class="seg" role="tablist">
     <button role="tab" id="tabLedger" aria-selected="true">Ledger</button>
+    <button role="tab" id="tabStages" aria-selected="false">Stages</button>
     <button role="tab" id="tabBreak" aria-selected="false">Breakdown</button>
     <button role="tab" id="tabFunds" aria-selected="false">Money sent</button>
   </div>
@@ -224,6 +243,12 @@ table.mini td.sub{font-size:.8rem;color:var(--muted)}
     <div class="chips" id="chips"></div>
     <p class="filter-sum num" id="filterSum" hidden></p>
     <div id="list"></div>
+  </section>
+
+  <section id="viewStages" hidden>
+    <div class="bal num" id="stageCard"></div>
+    <div id="stageList"></div>
+    <div class="block" id="cmBlock"><h2>4% material commission</h2><div id="cmCard"></div></div>
   </section>
 
   <section id="viewFunds" hidden>
@@ -268,7 +293,10 @@ table.mini td.sub{font-size:.8rem;color:var(--muted)}
         <option>Cheque</option><option>JazzCash / Easypaisa</option><option>Other</option></select></label>
       <label class="f">Reference / receipt ID<input id="fRef" placeholder="Optional" autocomplete="off"></label>
     </div>
-    <label class="f">Paid by<select id="fPaidBy"></select></label>
+    <div class="two">
+      <label class="f">Paid by<select id="fPaidBy"></select></label>
+      <label class="f">Contract stage<select id="fStage"></select></label>
+    </div>
     <label class="f">Note<textarea id="fNote" placeholder="Optional"></textarea></label>
     <div class="hint" id="formErr" style="color:var(--danger)"></div>
     <div class="actions">
@@ -296,6 +324,7 @@ table.mini td.sub{font-size:.8rem;color:var(--muted)}
     <div class="toggle"><span>Itemised list with daily totals</span><input type="checkbox" id="rItems" checked></div>
     <div class="toggle"><span>Materials and rates</span><input type="checkbox" id="rMats" checked></div>
     <div class="toggle" id="rFundsRow"><span id="rFundsLabel">Money sent and balance</span><input type="checkbox" id="rFunds" checked></div>
+    <div class="toggle" id="rStagesRow"><span>Contract stages and what is due</span><input type="checkbox" id="rStages" checked></div>
     <div class="hint num" id="rPreview"></div>
     <div class="actions"><button type="submit" class="btn primary" id="btnMakePdf">Create PDF</button></div>
   </form>
@@ -339,6 +368,19 @@ table.mini td.sub{font-size:.8rem;color:var(--muted)}
     <label class="f">Person you send money to<input id="sAgent" autocomplete="off" placeholder="e.g. Waqas"></label>
     <label class="f">Extra categories (comma separated)<input id="sCats" autocomplete="off" placeholder="e.g. Tiles, Paint"></label>
     <div class="actions"><button type="submit" class="btn primary">Save settings</button></div>
+    <div class="syncbox">
+      <h3>Contract</h3>
+      <p>The agreed labour rate and the covered area each floor is measured at. These drive every stage payment.</p>
+      <div class="two">
+        <label class="f">Rate (PKR per sq ft)<input id="sRate" inputmode="decimal" autocomplete="off" placeholder="650"></label>
+        <label class="f">Material commission (%)<input id="sCm" inputmode="decimal" autocomplete="off" placeholder="4"></label>
+      </div>
+      <div class="two">
+        <label class="f">Ground floor (sq ft)<input id="sGf" inputmode="decimal" autocomplete="off" placeholder="0"></label>
+        <label class="f">First floor (sq ft)<input id="sFf" inputmode="decimal" autocomplete="off" placeholder="0"></label>
+      </div>
+      <div class="hint num" id="contractHint"></div>
+    </div>
     <div class="syncbox" id="syncBox">
       <h3>Sync across devices</h3>
       <div id="syncOff">
@@ -374,6 +416,35 @@ const BASE_CATS = [
   ['Finishes','#B9739A'], ['Delivery & transport','#6B7A3E'], ['Site & misc','#A3A7AB'], ['Other','#5A5F63']
 ];
 const EXTRA_COLORS = ['#3D7DB8','#A65E8F','#5E9C8F','#C07A3E','#6D6AA8','#8C8A3A'];
+/* Contract schedule: rates are PKR per sq ft of that floor's covered area. Each floor's rates total BASE_RATE. */
+const BASE_RATE = 650;
+const STAGES = [
+  ['g1','ground','Plinth beam complete','پلنتھ بیم مکمل ہونے پر',100],
+  ['g2','ground','Roof complete','چھت مکمل ہونے پر',150],
+  ['g3','ground','Outside plaster','باہر پلستر',60],
+  ['g4','ground','Bathroom tiles','باتھ روم ٹائل',50],
+  ['g5','ground','Door lintel complete','ڈور لینٹر مکمل ہونے پر',100],
+  ['g6','ground','Inside plaster','اندر پلستر',60],
+  ['g7','ground','Roof parapet and water tank','چھت پردے اور ٹینکی',80],
+  ['g8','ground','Floor tiles','فرش ٹائل',50],
+  ['f1','first','First floor up to 4 ft','فرسٹ فلور چار فٹ تک',100],
+  ['f2','first','Roof complete','چھت مکمل ہونے پر',150],
+  ['f3','first','Inside plaster','اندر پلستر',60],
+  ['f4','first','Bathroom tiles','باتھ روم ٹائل',50],
+  ['f5','first','Door lintel complete','ڈور لینٹر مکمل ہونے پر',100],
+  ['f6','first','Boundary wall and kacha','باؤنڈری وال + کچا',80],
+  ['f7','first','Outside plaster','باہر پلستر',60],
+  ['f8','first','Floor tiles','فرش ٹائل',50]
+].map(([id, floor, name, urdu, rate]) => ({id, floor, name, urdu, rate}));
+const TRANCHES = [
+  ['c1','First roof complete','پہلی چھت مکمل کرنے پر'],
+  ['c2','Second roof complete','دوسری چھت مکمل کرنے پر'],
+  ['c3','Mumty, water tank and boundary wall','ممٹی ٹینکی + باؤنڈری وال مکمل ہونے پر'],
+  ['c4','Inside and outside plaster complete','اندر باہر پلستر مکمل کرنے پر'],
+  ['c5','Rest of the house complete','باقی گھر مکمل کرنے پر']
+].map(([id, name, urdu]) => ({id, name, urdu}));
+const STAGE_BY_ID = new Map([...STAGES, ...TRANCHES].map(s => [s.id, s]));
+const FLOOR_LABEL = {ground: 'Ground floor', first: 'First floor'};
 const $ = s => document.querySelector(s);
 const el = (t, a = {}, h = '') => { const e = document.createElement(t); for (const k in a) e.setAttribute(k, a[k]); if (h) e.innerHTML = h; return e; };
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -440,6 +511,111 @@ function statementRows() {
   return items;
 }
 function fundsTotals() { const sent = sum(state.transfers), spent = sum(state.entries.filter(e => e.paidBy !== 'self')); return {sent, spent, bal: sent - spent}; }
+
+/* ---------- Contract stages ---------- */
+function contract() {
+  const c = state.settings.contract || {};
+  return {rate: +c.rate > 0 ? +c.rate : BASE_RATE, gf: +c.gf || 0, ff: +c.ff || 0,
+    cm: isFinite(+c.cm) && c.cm !== '' ? +c.cm : 4, done: c.done && typeof c.done === 'object' ? c.done : {}};
+}
+const contractSet = () => { const C = contract(); return C.gf > 0 || C.ff > 0; };
+function stageAmount(s, C) {
+  C = C || contract();
+  const area = s.floor === 'ground' ? C.gf : C.ff;
+  return area * s.rate * (C.rate / BASE_RATE);
+}
+const stagePaid = id => sum(state.entries.filter(e => e.stage === id));
+/* Material base for the commission: everything not tagged to a labour stage or a commission tranche. */
+const materialBase = () => sum(state.entries.filter(e => !e.stage));
+function stageTotals() {
+  const C = contract(), rows = STAGES.map(s => {
+    const amount = stageAmount(s, C), paid = stagePaid(s.id);
+    return {s, amount, paid, done: !!C.done[s.id] || paid > 0, diff: paid ? paid - amount : 0};
+  });
+  const contractValue = rows.reduce((t, r) => t + r.amount, 0);
+  const earned = rows.filter(r => r.done).reduce((t, r) => t + r.amount, 0);
+  const paid = rows.reduce((t, r) => t + r.paid, 0);
+  const cmDue = materialBase() * contract().cm / 100;
+  const cmPaid = TRANCHES.reduce((t, x) => t + stagePaid(x.id), 0);
+  return {C, rows, contractValue, earned, paid, cmDue, cmPaid};
+}
+function setStageDone(id, on) {
+  const c = Object.assign({}, state.settings.contract || {});
+  c.done = Object.assign({}, c.done || {});
+  if (on) c.done[id] = today(); else delete c.done[id];
+  state.settings.contract = c; state.settings.updated = Date.now(); save(); render();
+}
+
+const tickSvg = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 12l5 5 9-10"/></svg>';
+function stageRow(r) {
+  const paidBit = r.paid
+    ? `<small>paid ${fmt(r.paid)}${Math.abs(r.diff) >= 1 ? ` <span class="${r.diff > 0 ? 'over' : 'under'}">${r.diff > 0 ? '+' : '-'}${fmt(Math.abs(r.diff))}</span>` : ''}</small>`
+    : `<small>${fmt2(r.s.rate)}/sq ft</small>`;
+  const meta = r.paid
+    ? (Math.abs(r.diff) < 1 ? 'Paid in full' : r.diff > 0 ? `Paid ${fmt(r.diff)} more than the contract` : `${fmt(-r.diff)} still due`)
+    : r.done ? 'Work complete, not paid yet' : 'Tap to record this payment';
+  return `<div class="stage${r.done ? ' done' : ''}">
+    <button type="button" class="tick-box" data-tick="${r.s.id}" aria-pressed="${r.done}" aria-label="Mark ${esc(r.s.name)} complete">${tickSvg}</button>
+    <button type="button" class="stage-main" data-pay="${r.s.id}">
+      <span><span class="n">${esc(r.s.name)}</span><span class="u">${esc(r.s.urdu)}</span><span class="m">${esc(meta)}</span></span>
+      <span class="a num">${fmt(r.amount)}${paidBit}</span>
+    </button></div>`;
+}
+function renderStages() {
+  const T = stageTotals(), C = T.C;
+  if (!contractSet()) {
+    $('#stageCard').innerHTML = `<div class="l">Set the contract first</div>
+      <div class="why">Open settings and enter the rate per sq ft and the covered area of each floor. The 16 stage payments are then worked out for you.</div>
+      <div class="setup"><button class="btn primary" id="stageSetup" style="flex:0 0 auto;padding:0 18px">Open settings</button></div>`;
+    $('#stageSetup').onclick = () => openMenu();
+    $('#stageList').innerHTML = ''; $('#cmBlock').hidden = true; return;
+  }
+  $('#cmBlock').hidden = false;
+  const left = T.contractValue - T.paid;
+  $('#stageCard').innerHTML = `<div class="l">Labour contract at PKR ${fmt(C.rate)} per sq ft</div>
+    <b>PKR ${fmt(T.contractValue)}</b>
+    <div class="why">${fmt2(C.gf)} sq ft ground and ${fmt2(C.ff)} sq ft first floor, split across 16 stages.</div>
+    <div class="split"><div><strong>${fmt(T.paid)}</strong><span>Paid so far</span></div>
+    <div><strong class="${left < 0 ? 'negc' : ''}">${signed(left)}</strong><span>${left < 0 ? 'Paid above contract' : 'Still to pay'}</span></div></div>`;
+  $('#stageList').innerHTML = ['ground', 'first'].map(fl => {
+    const rows = T.rows.filter(r => r.s.floor === fl), area = fl === 'ground' ? C.gf : C.ff;
+    const tot = rows.reduce((t, r) => t + r.amount, 0);
+    return `<div class="floor-head"><h3>${FLOOR_LABEL[fl]}</h3><span class="num">${fmt2(area)} sq ft &middot; PKR ${fmt(tot)}</span></div>` + rows.map(stageRow).join('');
+  }).join('');
+  const bal = T.cmDue - T.cmPaid, base = materialBase();
+  $('#cmCard').innerHTML = `<table class="mini num"><tr><th>Item</th><th class="r">PKR</th></tr>
+    <tr><td>Material and site spend recorded<div class="sub">Every expense not tagged to a labour stage</div></td><td class="r">${fmt(base)}</td></tr>
+    <tr><td>${fmt2(C.cm)}% of that, due to the contractor</td><td class="r">${fmt(T.cmDue)}</td></tr>
+    <tr><td>Commission paid so far</td><td class="r">${fmt(T.cmPaid)}</td></tr>
+    <tr><td><b>Still owed</b></td><td class="r"><b class="${bal < 0 ? 'negc' : ''}">${signed(bal)}</b></td></tr></table>
+    <p class="setup-note">Released in five parts as the work reaches each milestone. Tag a payment to its milestone when you make it.</p>` +
+    TRANCHES.map(x => {
+      const p = stagePaid(x.id);
+      return `<div class="stage${p > 0 ? ' done' : ''}">
+        <button type="button" class="tick-box" data-tick="${x.id}" aria-pressed="${p > 0}" aria-label="${esc(x.name)}" ${p > 0 ? 'disabled' : ''}>${tickSvg}</button>
+        <button type="button" class="stage-main" data-pay="${x.id}">
+          <span><span class="n">${esc(x.name)}</span><span class="u">${esc(x.urdu)}</span></span>
+          <span class="a num">${p > 0 ? fmt(p) : '<small>not paid</small>'}</span>
+        </button></div>`;
+    }).join('');
+}
+$('#stageList').addEventListener('click', onStageClick);
+$('#cmCard').addEventListener('click', onStageClick);
+function onStageClick(ev) {
+  const tick = ev.target.closest('[data-tick]');
+  if (tick) { const id = tick.dataset.tick; setStageDone(id, tick.getAttribute('aria-pressed') !== 'true'); return; }
+  const pay = ev.target.closest('[data-pay]');
+  if (!pay) return;
+  const id = pay.dataset.pay, s = STAGE_BY_ID.get(id);
+  if (!s) return;
+  if (s.rate) {
+    const amount = Math.max(0, stageAmount(s) - stagePaid(id));
+    openEntry(null, {stage: id, amount: amount || stageAmount(s), desc: `${FLOOR_LABEL[s.floor]}: ${s.name}`, cat: 'Labour & excavation'});
+  } else {
+    const T = stageTotals();
+    openEntry(null, {stage: id, amount: Math.max(0, T.cmDue - T.cmPaid), desc: `Commission: ${s.name}`, cat: 'Labour & excavation'});
+  }
+}
 const signed = n => (n < 0 ? '-' : '') + fmt(Math.abs(n));
 const byDateDesc = (a, b) => b.date.localeCompare(a.date) || (b.created || 0) - (a.created || 0);
 
@@ -454,7 +630,7 @@ function render() {
   renderTape(total);
   renderStats(total);
   renderChips();
-  view === 'ledger' ? renderLedger() : view === 'funds' ? renderFunds() : renderBreakdown();
+  view === 'ledger' ? renderLedger() : view === 'funds' ? renderFunds() : view === 'stages' ? renderStages() : renderBreakdown();
 }
 
 function catTotals(list) {
@@ -622,9 +798,20 @@ function materials(E) {
 function fillCats(sel, value) {
   sel.innerHTML = categories().map(c => `<option${c.n === value ? ' selected' : ''}>${esc(c.n)}</option>`).join('');
 }
-function openEntry(id) {
+function fillStages(sel, value) {
+  const C = contract();
+  const opt = (v, label, sel2) => `<option value="${esc(v)}"${sel2 ? ' selected' : ''}>${esc(label)}</option>`;
+  let h = opt('', 'Not a stage payment', !value);
+  ['ground', 'first'].forEach(fl => {
+    h += `<optgroup label="${FLOOR_LABEL[fl]}">` + STAGES.filter(s => s.floor === fl)
+      .map(s => opt(s.id, `${s.name} - ${fmt(stageAmount(s, C))}`, value === s.id)).join('') + '</optgroup>';
+  });
+  h += `<optgroup label="${fmt2(C.cm)}% material commission">` + TRANCHES.map(x => opt(x.id, x.name, value === x.id)).join('') + '</optgroup>';
+  sel.innerHTML = h;
+}
+function openEntry(id, pre) {
   editingId = id || null;
-  const e = state.entries.find(x => x.id === id) || {date: today(), cat: filterCat || 'Other'};
+  const e = state.entries.find(x => x.id === id) || Object.assign({date: today(), cat: filterCat || 'Other'}, pre || {});
   $('#entryTitle').textContent = id ? 'Edit expense' : 'Add expense';
   $('#btnSave').textContent = id ? 'Save changes' : 'Save expense';
   $('#btnDelete').hidden = !id;
@@ -636,6 +823,7 @@ function openEntry(id) {
   $('#fRef').value = e.ref || ''; $('#fNote').value = e.note || '';
   $('#fPaidBy').innerHTML = `<option value="agent">${esc(agentName())} (from money sent)</option><option value="self">Me directly</option>`;
   $('#fPaidBy').value = e.paidBy === 'self' ? 'self' : 'agent';
+  fillStages($('#fStage'), e.stage || '');
   $('#formErr').textContent = ''; amountHint();
   $('#payeeList').innerHTML = [...new Set(state.entries.map(x => x.payee).filter(Boolean))].map(p => `<option value="${esc(p)}">`).join('');
   $('#dlgEntry').showModal();
@@ -653,7 +841,8 @@ $('#entryForm').addEventListener('submit', ev => {
   const err = !(amount > 0) ? 'Enter an amount above zero.' : !desc ? 'Add a short description.' : !date ? 'Pick a date.' : (qtyRaw && !(qty > 0)) ? 'Quantity must be a number.' : '';
   if (err) { $('#formErr').textContent = err; return; }
   const rec = {id: editingId || uid(), updated: Date.now(), date, desc, amount, cat: $('#fCat').value, payee: $('#fPayee').value.trim(),
-    method: $('#fMethod').value, ref: $('#fRef').value.trim(), note: $('#fNote').value.trim(), paidBy: $('#fPaidBy').value};
+    method: $('#fMethod').value, ref: $('#fRef').value.trim(), note: $('#fNote').value.trim(), paidBy: $('#fPaidBy').value,
+    stage: $('#fStage').value || ''};
   if (qty) { rec.qty = qty; rec.unit = $('#fUnit').value.trim(); }
   const i = state.entries.findIndex(x => x.id === editingId);
   if (i >= 0) state.entries[i] = {...state.entries[i], ...rec, qty: rec.qty, unit: rec.unit};
@@ -715,6 +904,7 @@ function openReport() {
   const dates = state.entries.map(e => e.date).sort();
   $('#rFrom').value = dates[0]; $('#rTo').value = dates[dates.length - 1];
   $('#rFundsRow').hidden = !state.transfers.length; $('#rFundsLabel').textContent = `Money sent and balance with ${agentName()}`;
+  $('#rStagesRow').hidden = !contractSet();
   reportPreview(); $('#dlgReport').showModal();
 }
 function reportRange() {
@@ -742,7 +932,7 @@ $('#reportForm').addEventListener('submit', ev => {
   ev.preventDefault();
   const r = reportEntries(); if (!r.length) return;
   try {
-    const blob = buildPdf(r, reportRange()[2], $('#rItems').checked, $('#rMats').checked, state.transfers.length && $('#rFunds').checked, reportRange());
+    const blob = buildPdf(r, reportRange()[2], $('#rItems').checked, $('#rMats').checked, state.transfers.length && $('#rFunds').checked, reportRange(), contractSet() && $('#rStages').checked);
     const name = `${(state.settings.project || 'Project').replace(/[^\w-]+/g, '-')}-report-${today()}.pdf`;
     deliver(blob, name, 'application/pdf');
     $('#dlgReport').close();
@@ -750,7 +940,7 @@ $('#reportForm').addEventListener('submit', ev => {
 });
 
 const hex = h => [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)];
-function buildPdf(rows, periodLabel, items, mats, funds, range) {
+function buildPdf(rows, periodLabel, items, mats, funds, range, stages) {
   if (!window.jspdf) throw new Error('PDF library not loaded yet. Try again in a second.');
   const {jsPDF} = window.jspdf, doc = new jsPDF({unit: 'pt', format: 'a4'});
   const W = doc.internal.pageSize.getWidth(), M = 40, INK = [30, 39, 43], MUT = [93, 103, 107], TAPE = [242, 194, 48];
@@ -806,6 +996,26 @@ function buildPdf(rows, periodLabel, items, mats, funds, range) {
       columnStyles: {1: {halign: 'right'}, 2: {halign: 'right'}, 3: {halign: 'right'}},
       didParseCell: d => { if (d.section === 'head' && d.column.index > 0) d.cell.styles.halign = 'right'; }});
     y = doc.lastAutoTable.finalY + 26;
+  }
+  if (stages) {
+    const T = stageTotals();
+    if (y > 560) { doc.addPage(); y = 50; }
+    section('Contract stages');
+    doc.autoTable({...base, startY: y, showFoot: 'lastPage',
+      head: [['Floor', 'Stage', 'Rate', 'Due (PKR)', 'Paid (PKR)', 'Difference']],
+      body: T.rows.map(r => [FLOOR_LABEL[r.s.floor], r.s.name, fmt2(r.s.rate) + '/sq ft', fmt(r.amount),
+        r.paid ? fmt(r.paid) : (r.done ? 'Work done' : ''), r.paid && Math.abs(r.diff) >= 1 ? (r.diff > 0 ? '+' : '-') + fmt(Math.abs(r.diff)) : '']),
+      foot: [[{content: 'Labour contract', colSpan: 3}, {content: fmt(T.contractValue), styles: {halign: 'right'}},
+        {content: fmt(T.paid), styles: {halign: 'right'}}, {content: signed(T.paid - T.contractValue), styles: {halign: 'right'}}]],
+      styles: {...base.styles, fontSize: 8, cellPadding: 4},
+      columnStyles: {0: {cellWidth: 62}, 2: {halign: 'right'}, 3: {halign: 'right'}, 4: {halign: 'right'}, 5: {halign: 'right'}},
+      didParseCell: d => { if (d.section === 'head' && d.column.index > 1) d.cell.styles.halign = 'right';
+        if (d.section === 'body' && d.column.index === 5 && d.cell.raw) d.cell.styles.textColor = String(d.cell.raw).startsWith('+') ? [179, 38, 30] : [47, 122, 79]; }});
+    y = doc.lastAutoTable.finalY + 10;
+    doc.setFontSize(8); doc.setTextColor(...MUT);
+    doc.text(`Measured at ${fmt2(T.C.gf)} sq ft ground floor and ${fmt2(T.C.ff)} sq ft first floor, PKR ${fmt(T.C.rate)} per sq ft.`, M, y);
+    doc.text(`${fmt2(T.C.cm)}% material commission: PKR ${fmt(T.cmDue)} due on PKR ${fmt(materialBase())} of material and site spend, PKR ${fmt(T.cmPaid)} paid.`, M, y + 11);
+    y += 36;
   }
   if (funds) {
     const [f, t] = range, all = statementRows(), name = agentName();
@@ -879,16 +1089,28 @@ function openMenu() {
   const S = state.settings;
   $('#sName').value = S.project || ''; $('#sSub').value = S.subtitle || '';
   $('#sBudget').value = S.budget ? fmt(S.budget) : ''; $('#sCats').value = (S.extraCats || []).join(', '); $('#sAgent').value = S.agent || '';
-  budgetHint(); renderSyncBox(); $('#dlgMenu').showModal();
+  const C = contract();
+  $('#sRate').value = C.rate || ''; $('#sCm').value = C.cm; $('#sGf').value = C.gf || ''; $('#sFf').value = C.ff || '';
+  budgetHint(); contractHint(); renderSyncBox(); $('#dlgMenu').showModal();
 }
+function contractHint() {
+  const rate = parseAmount($('#sRate').value) || BASE_RATE, gf = parseAmount($('#sGf').value) || 0, ff = parseAmount($('#sFf').value) || 0;
+  $('#contractHint').textContent = (gf > 0 || ff > 0)
+    ? `Labour contract PKR ${fmt((gf + ff) * rate)} over 16 stages`
+    : 'Enter the covered area measured from the approved drawings';
+}
+['#sRate', '#sGf', '#sFf'].forEach(s => $(s).addEventListener('input', contractHint));
 function budgetHint() { const r = $('#sBudget').value, v = parseAmount(r); $('#budgetHint').textContent = !r ? 'Leave empty for no budget' : isFinite(v) ? `PKR ${fmt(v)}` : 'Use digits, optionally ending in lakh or crore'; }
 $('#sBudget').addEventListener('input', budgetHint);
 $('#menuForm').addEventListener('submit', ev => {
   ev.preventDefault();
   const b = $('#sBudget').value.trim() ? parseAmount($('#sBudget').value) : 0;
   if (!isFinite(b)) { budgetHint(); return; }
+  const num = (sel, dflt) => { const raw = $(sel).value.trim(); if (!raw) return dflt; const v = parseAmount(raw); return isFinite(v) ? v : dflt; };
+  const C = contract();
+  const con = {rate: num('#sRate', BASE_RATE), cm: num('#sCm', 4), gf: num('#sGf', 0), ff: num('#sFf', 0), done: C.done};
   Object.assign(state.settings, {project: $('#sName').value.trim() || 'Untitled project', subtitle: $('#sSub').value.trim(), budget: b,
-    extraCats: $('#sCats').value.split(',').map(s => s.trim()).filter(Boolean), agent: $('#sAgent').value.trim(), updated: Date.now()});
+    extraCats: $('#sCats').value.split(',').map(s => s.trim()).filter(Boolean), agent: $('#sAgent').value.trim(), contract: con, updated: Date.now()});
   save(); $('#dlgMenu').close(); render(); toast('Settings saved');
 });
 $('#btnExport').addEventListener('click', () => {
@@ -897,10 +1119,11 @@ $('#btnExport').addEventListener('click', () => {
 });
 $('#btnCsv').addEventListener('click', () => {
   const q = v => `"${String(v ?? '').replace(/"/g, '""')}"`;
-  const rows = [...state.entries.map(e => ['Expense', e.date, e.desc, e.cat, e.amount, e.qty ?? '', e.unit ?? '', e.payee, e.paidBy === 'self' ? 'Me' : agentName(), e.method, e.ref, e.note, '']),
-    ...state.transfers.map(t => ['Money sent', t.date, `Money sent to ${agentName()}`, '', t.amount, '', '', agentName(), 'Me', t.method, t.ref, t.note, t.aed ?? ''])]
+  const stName = id => { const s = STAGE_BY_ID.get(id); return s ? (s.floor ? `${FLOOR_LABEL[s.floor]}: ${s.name}` : `Commission: ${s.name}`) : ''; };
+  const rows = [...state.entries.map(e => ['Expense', e.date, e.desc, e.cat, e.amount, e.qty ?? '', e.unit ?? '', e.payee, e.paidBy === 'self' ? 'Me' : agentName(), e.method, e.ref, e.note, '', stName(e.stage)]),
+    ...state.transfers.map(t => ['Money sent', t.date, `Money sent to ${agentName()}`, '', t.amount, '', '', agentName(), 'Me', t.method, t.ref, t.note, t.aed ?? '', ''])]
     .sort((a, b) => a[1].localeCompare(b[1]));
-  const lines = [['Type', 'Date', 'Description', 'Category', 'Amount (PKR)', 'Quantity', 'Unit', 'Paid to', 'Paid by', 'Method', 'Reference', 'Note', 'AED sent'].map(q).join(',')]
+  const lines = [['Type', 'Date', 'Description', 'Category', 'Amount (PKR)', 'Quantity', 'Unit', 'Paid to', 'Paid by', 'Method', 'Reference', 'Note', 'AED sent', 'Contract stage'].map(q).join(',')]
     .concat(rows.map(r => r.map(q).join(',')));
   deliver(new Blob(['\ufeff' + lines.join('\r\n')], {type: 'text/csv'}), `${(state.settings.project || 'project').replace(/[^\w-]+/g, '-')}-${today()}.csv`, 'text/csv');
 });
@@ -1046,11 +1269,14 @@ $('#list').addEventListener('click', e => { const r = e.target.closest('.row'); 
 $('#chips').addEventListener('click', e => { const c = e.target.closest('.chip'); if (!c) return; filterCat = c.dataset.cat; renderChips(); renderLedger(); });
 $('#q').addEventListener('input', e => { query = e.target.value; renderLedger(); });
 function setView(v) {
-  view = v; $('#tabLedger').setAttribute('aria-selected', v === 'ledger'); $('#tabBreak').setAttribute('aria-selected', v === 'break'); $('#tabFunds').setAttribute('aria-selected', v === 'funds');
-  $('#viewLedger').hidden = v !== 'ledger'; $('#viewBreak').hidden = v !== 'break'; $('#viewFunds').hidden = v !== 'funds';
+  view = v;
+  const tabs = {ledger: '#tabLedger', stages: '#tabStages', break: '#tabBreak', funds: '#tabFunds'};
+  const views = {ledger: '#viewLedger', stages: '#viewStages', break: '#viewBreak', funds: '#viewFunds'};
+  for (const k in tabs) { $(tabs[k]).setAttribute('aria-selected', v === k); $(views[k]).hidden = v !== k; }
   $('#btnAdd').lastChild.textContent = v === 'funds' ? 'Record money sent' : 'Add expense'; render();
 }
-$('#tabLedger').onclick = () => setView('ledger'); $('#tabBreak').onclick = () => setView('break'); $('#tabFunds').onclick = () => setView('funds');
+$('#tabLedger').onclick = () => setView('ledger'); $('#tabStages').onclick = () => setView('stages');
+$('#tabBreak').onclick = () => setView('break'); $('#tabFunds').onclick = () => setView('funds');
 $('#hero').addEventListener('click', e => { if (e.target.closest('#tape')) setView('break'); });
 render(); renderSyncLine(); syncNow(false);
 if ('serviceWorker' in navigator && location.protocol.startsWith('http')) navigator.serviceWorker.register('sw.js').catch(() => {});
