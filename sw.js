@@ -1,5 +1,5 @@
 // Bump VERSION whenever you change any file, so iPhones pick up the update.
-const VERSION = 'site-ledger-v3';
+const VERSION = 'site-ledger-v4';
 const ASSETS = [
   './', './index.html', './manifest.webmanifest',
   './vendor/jspdf.umd.min.js', './vendor/jspdf.plugin.autotable.min.js',
