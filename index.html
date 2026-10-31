@@ -130,6 +130,32 @@ table.mini .r{text-align:right;padding-left:10px;white-space:nowrap}
 #stmt td:first-child{white-space:nowrap;padding-right:10px}
 #stmt{font-size:.88rem}
 
+/* Receipts */
+.rcpt{margin-top:12px;border:1px solid var(--line);border-radius:10px;background:var(--bg);padding:10px 12px}
+.rcpt .lab{font-size:.85rem;color:var(--muted);font-weight:500}
+.rcpt .add{margin-top:8px;display:flex;align-items:center;gap:8px;width:100%;border:1px dashed var(--line);background:none;
+  border-radius:9px;height:46px;padding:0 12px;color:var(--muted);font-weight:500}
+.rcpt .add svg{width:19px;height:19px}
+.rcpt .have{margin-top:8px;display:grid;grid-template-columns:54px 1fr auto;gap:10px;align-items:center}
+.rcpt .have img{width:54px;height:54px;object-fit:cover;border-radius:7px;border:1px solid var(--line);background:var(--surface)}
+.rcpt .have .meta{font-size:.82rem;color:var(--muted);min-width:0}
+.rcpt .have .meta b{display:block;color:var(--ink);font-weight:500;font-size:.9rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rcpt .have button{border:0;background:none;color:var(--danger);font-weight:600;padding:8px 2px}
+.rcpt .busy{margin-top:8px;font-size:.85rem;color:var(--muted)}
+.rcpt .cover{margin-top:8px;font-size:.82rem;color:var(--ok);font-weight:500}
+.pick{display:grid;grid-template-columns:48px 1fr;gap:10px;align-items:center;width:100%;text-align:left;
+  background:none;border:0;border-bottom:1px solid var(--line);padding:10px 2px}
+.pick img{width:48px;height:48px;object-fit:cover;border-radius:7px;border:1px solid var(--line);background:var(--bg)}
+.pick .d{font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pick .m{font-size:.82rem;color:var(--muted);margin-top:2px}
+.shot{display:inline-flex;align-items:center;gap:3px;color:var(--ok);font-size:.8rem;margin-left:8px}
+.shot svg{width:13px;height:13px}
+#dlgShot{max-width:min(96vw,760px);background:var(--ink)}
+#dlgShot .shot-head{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 14px;color:var(--bg)}
+#dlgShot .shot-head b{font-weight:600;font-size:.95rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#dlgShot .shot-head button{border:0;background:none;color:var(--bg);font-weight:600;padding:8px;opacity:.85}
+#dlgShot img{display:block;width:100%;height:auto;max-height:76vh;object-fit:contain;background:#000}
+
 /* Stages */
 .stage{display:grid;grid-template-columns:24px 1fr;gap:10px;align-items:start;border-bottom:1px solid var(--line)}
 .stage .tick-box{width:24px;height:24px;margin-top:11px;border:1.5px solid var(--line);background:var(--bg);border-radius:7px;display:grid;place-items:center;padding:0}
@@ -267,6 +293,18 @@ table.mini td.sub{font-size:.8rem;color:var(--muted)}
 
 <button class="fab" id="btnAdd"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg>Add expense</button>
 <input type="file" id="fileIn" accept="application/json,.json" hidden>
+<input type="file" id="shotIn" accept="image/*" hidden>
+<dialog id="dlgPick">
+  <form class="sheet" method="dialog">
+    <div class="sheet-head"><h2>Link an existing receipt</h2><button type="button" class="link" data-close>Cancel</button></div>
+    <p class="hint">Pick the bank transfer this payment was part of. One receipt can cover several payments.</p>
+    <div id="pickList"></div>
+  </form>
+</dialog>
+<dialog id="dlgShot">
+  <div class="shot-head"><b id="shotTitle">Receipt</b><button type="button" data-close>Close</button></div>
+  <img id="shotImg" alt="Receipt">
+</dialog>
 <div class="toast" id="toast" role="status"></div>
 
 <!-- Entry sheet -->
@@ -296,6 +334,24 @@ table.mini td.sub{font-size:.8rem;color:var(--muted)}
     <div class="two">
       <label class="f">Paid by<select id="fPaidBy"></select></label>
       <label class="f">Contract stage<select id="fStage"></select></label>
+    </div>
+    <div class="rcpt">
+      <span class="lab">Receipt or proof of payment</span>
+      <button type="button" class="add" id="rcptAdd">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9a2 2 0 0 1 2-2h2l1.6-2h6.8L17 7h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><circle cx="12" cy="13" r="3.4"/></svg>
+        <span id="rcptAddLabel">Add a photo or screenshot</span>
+      </button>
+      <button type="button" class="add" id="rcptPick" hidden>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h10l2 2h4v9a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2z"/><path d="M8 4h8"/></svg>
+        <span>Link a receipt already added</span>
+      </button>
+      <div class="cover" id="rcptCover" hidden></div>
+      <div class="have" id="rcptHave" hidden>
+        <img id="rcptThumb" alt="Receipt">
+        <span class="meta"><b id="rcptName"></b><span id="rcptSize"></span></span>
+        <button type="button" id="rcptRemove">Remove</button>
+      </div>
+      <div class="busy" id="rcptBusy" hidden></div>
     </div>
     <label class="f">Note<textarea id="fNote" placeholder="Optional"></textarea></label>
     <div class="hint" id="formErr" style="color:var(--danger)"></div>
@@ -471,7 +527,7 @@ function parseAmount(raw) {
 
 /* ---------- State ---------- */
 let state = load();
-let view = 'ledger', filterCat = '', query = '', editingId = null;
+let view = 'ledger', filterCat = '', filterStage = '', query = '', editingId = null;
 
 function load() {
   try { const s = JSON.parse(localStorage.getItem(KEY)); if (s && Array.isArray(s.entries)) return normalise(s); } catch (e) {}
@@ -511,6 +567,88 @@ function statementRows() {
   return items;
 }
 function fundsTotals() { const sent = sum(state.transfers), spent = sum(state.entries.filter(e => e.paidBy !== 'self')); return {sent, spent, bal: sent - spent}; }
+
+/* ---------- Receipts ----------
+   The expense carries only small metadata ({id, name, bytes, w, h}); the image itself lives in
+   IndexedDB on each device and as its own file in the sync gist, so the main JSON stays small. */
+const RDB = 'site-ledger-receipts', RSTORE = 'img';
+let rdbP = null;
+function rdb() {
+  if (rdbP) return rdbP;
+  rdbP = new Promise((res, rej) => {
+    let q; try { q = indexedDB.open(RDB, 1); } catch (e) { rej(e); return; }
+    q.onupgradeneeded = () => { if (!q.result.objectStoreNames.contains(RSTORE)) q.result.createObjectStore(RSTORE); };
+    q.onsuccess = () => res(q.result); q.onerror = () => rej(q.error);
+  }).catch(e => { rdbP = null; throw e; });
+  return rdbP;
+}
+function rdbDo(mode, fn) {
+  return rdb().then(db => new Promise((res, rej) => {
+    const tx = db.transaction(RSTORE, mode), rq = fn(tx.objectStore(RSTORE));
+    tx.oncomplete = () => res(rq ? rq.result : undefined); tx.onerror = () => rej(tx.error); tx.onabort = () => rej(tx.error);
+  }));
+}
+const shotGet = id => rdbDo('readonly', s => s.get(id)).catch(() => null);
+const shotPut = (id, dataUrl) => rdbDo('readwrite', s => s.put(dataUrl, id));
+const shotDel = id => rdbDo('readwrite', s => s.delete(id)).catch(() => {});
+const shotKeys = () => rdbDo('readonly', s => s.getAllKeys()).then(k => k || []).catch(() => []);
+
+const MAX_EDGE = 1200, TARGET = 180 * 1024;
+/* Shrink to something a gist can carry while bank-receipt text stays readable. */
+function compressImage(file) {
+  return new Promise((res, rej) => {
+    const fr = new FileReader();
+    fr.onerror = () => rej(new Error('Could not read that file'));
+    fr.onload = () => {
+      const img = new Image();
+      img.onerror = () => rej(new Error('That file is not an image'));
+      img.onload = () => {
+        let w = img.naturalWidth, h = img.naturalHeight;
+        if (!w || !h) { rej(new Error('That image is empty')); return; }
+        const steps = [[MAX_EDGE, .72], [MAX_EDGE, .58], [1000, .55], [820, .5]];
+        let out = '';
+        for (const [edge, q] of steps) {
+          const sc = Math.min(1, edge / Math.max(w, h));
+          const cw = Math.max(1, Math.round(w * sc)), ch = Math.max(1, Math.round(h * sc));
+          const cv = document.createElement('canvas'); cv.width = cw; cv.height = ch;
+          const cx = cv.getContext('2d');
+          cx.fillStyle = '#fff'; cx.fillRect(0, 0, cw, ch);
+          cx.drawImage(img, 0, 0, cw, ch);
+          out = cv.toDataURL('image/jpeg', q);
+          if (out.length * 0.75 <= TARGET) { res({dataUrl: out, w: cw, h: ch}); return; }
+        }
+        res({dataUrl: out, w, h});
+      };
+      img.src = fr.result;
+    };
+    fr.readAsDataURL(file);
+  });
+}
+/* One bank transfer often covers several line items, so a receipt may be linked to many expenses.
+   The image is stored once under its id; entries point at it. */
+const receiptUsers = (rid, exceptId) => state.entries.filter(e => e.receipt && e.receipt.id === rid && e.id !== exceptId);
+function allReceipts() {
+  const m = new Map();
+  state.entries.forEach(e => {
+    if (!e.receipt || !e.receipt.id) return;
+    const o = m.get(e.receipt.id) || {...e.receipt, uses: 0, total: 0, last: ''};
+    o.uses++; o.total += e.amount; if (e.date > o.last) o.last = e.date;
+    m.set(e.receipt.id, o);
+  });
+  return [...m.values()].sort((a, b) => b.last.localeCompare(a.last));
+}
+/* Free the image only once nothing points at it any more. */
+function releaseReceipt(rid, exceptId) {
+  if (!rid || receiptUsers(rid, exceptId).length) return;
+  shotDel(rid); state.deleted['r:' + rid] = Date.now();
+}
+const coverNote = rid => {
+  const u = receiptUsers(rid, null);
+  return u.length > 1 ? `Covers ${u.length} payments totalling PKR ${fmt(u.reduce((t, e) => t + e.amount, 0))}` : '';
+};
+
+const shotBytes = d => Math.round((String(d || '').split(',')[1] || '').length * 0.75);
+const kb = b => b >= 1024 * 1024 ? (b / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(b / 1024)) + ' KB';
 
 /* ---------- Contract stages ---------- */
 function contract() {
@@ -552,8 +690,8 @@ function stageRow(r) {
     ? `<small>paid ${fmt(r.paid)}${Math.abs(r.diff) >= 1 ? ` <span class="${r.diff > 0 ? 'over' : 'under'}">${r.diff > 0 ? '+' : '-'}${fmt(Math.abs(r.diff))}</span>` : ''}</small>`
     : `<small>${fmt2(r.s.rate)}/sq ft</small>`;
   const meta = r.paid
-    ? (Math.abs(r.diff) < 1 ? 'Paid in full' : r.diff > 0 ? `Paid ${fmt(r.diff)} more than the contract` : `${fmt(-r.diff)} still due`)
-    : r.done ? 'Work complete, not paid yet' : 'Tap to record this payment';
+    ? (Math.abs(r.diff) < 1 ? 'Paid in full. Tap to edit' : r.diff > 0 ? `Paid ${fmt(r.diff)} more than the contract. Tap to edit` : `${fmt(-r.diff)} still due. Tap to edit`)
+    : r.done ? 'Work complete, not paid yet' : 'Tap to record what you paid';
   return `<div class="stage${r.done ? ' done' : ''}">
     <button type="button" class="tick-box" data-tick="${r.s.id}" aria-pressed="${r.done}" aria-label="Mark ${esc(r.s.name)} complete">${tickSvg}</button>
     <button type="button" class="stage-main" data-pay="${r.s.id}">
@@ -608,13 +746,11 @@ function onStageClick(ev) {
   if (!pay) return;
   const id = pay.dataset.pay, s = STAGE_BY_ID.get(id);
   if (!s) return;
-  if (s.rate) {
-    const amount = Math.max(0, stageAmount(s) - stagePaid(id));
-    openEntry(null, {stage: id, amount: amount || stageAmount(s), desc: `${FLOOR_LABEL[s.floor]}: ${s.name}`, cat: 'Labour & excavation'});
-  } else {
-    const T = stageTotals();
-    openEntry(null, {stage: id, amount: Math.max(0, T.cmDue - T.cmPaid), desc: `Commission: ${s.name}`, cat: 'Labour & excavation'});
-  }
+  const already = state.entries.filter(e => e.stage === id);
+  if (already.length === 1) { openEntry(already[0].id); return; }   // one payment recorded: edit it instead of adding a second
+  if (already.length > 1) { filterCat = ''; query = ''; $('#q').value = ''; filterStage = id; setView('ledger'); return; }
+  /* Amount is left blank on purpose: type what was actually paid. The contract figure shows as a hint below it. */
+  openEntry(null, {stage: id, desc: s.rate ? `${FLOOR_LABEL[s.floor]}: ${s.name}` : `Commission: ${s.name}`, cat: 'Labour & excavation'});
 }
 const signed = n => (n < 0 ? '-' : '') + fmt(Math.abs(n));
 const byDateDesc = (a, b) => b.date.localeCompare(a.date) || (b.created || 0) - (a.created || 0);
@@ -689,11 +825,12 @@ function renderChips() {
 
 function filtered() {
   const q = query.trim().toLowerCase();
-  return state.entries.filter(e => (!filterCat || e.cat === filterCat) &&
+  return state.entries.filter(e => (!filterCat || e.cat === filterCat) && (!filterStage || e.stage === filterStage) &&
     (!q || [e.desc, e.payee, e.ref, e.note, e.cat, e.method, String(e.amount)].join(' ').toLowerCase().includes(q)));
 }
 
 const proofIcon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12l5 5 9-10"/></svg>';
+const shotIcon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M3 9a2 2 0 0 1 2-2h2l1.6-2h6.8L17 7h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><circle cx="12" cy="13" r="3.4"/></svg>';
 function renderLedger() {
   const list = $('#list');
   if (!state.entries.length) {
@@ -705,8 +842,11 @@ function renderLedger() {
   }
   const rows = filtered().sort(byDateDesc);
   const fs = $('#filterSum');
-  if (filterCat || query.trim()) { fs.hidden = false; fs.textContent = `${rows.length} ${rows.length === 1 ? 'payment' : 'payments'} totalling PKR ${fmt(sum(rows))}`; }
-  else fs.hidden = true;
+  const stg = filterStage ? STAGE_BY_ID.get(filterStage) : null;
+  if (filterCat || filterStage || query.trim()) {
+    fs.hidden = false;
+    fs.textContent = (stg ? `${stg.name}: ` : '') + `${rows.length} ${rows.length === 1 ? 'payment' : 'payments'} totalling PKR ${fmt(sum(rows))}` + (stg ? '. Tap All to clear' : '');
+  } else fs.hidden = true;
   if (!rows.length) { list.innerHTML = `<div class="empty"><p>Nothing matches. Clear the search or pick All.</p></div>`; return; }
   const groups = new Map();
   rows.forEach(e => { if (!groups.has(e.date)) groups.set(e.date, []); groups.get(e.date).push(e); });
@@ -714,7 +854,7 @@ function renderLedger() {
     es.map(e => {
       const meta = [e.payee, e.qty ? `${fmt2(e.qty)} ${esc(e.unit || '')}`.trim() : '', e.method, e.paidBy === 'self' ? 'Paid by me' : ''].filter(Boolean).map(esc).join(', ');
       return `<button class="row" data-id="${esc(e.id)}"><span class="sw" style="background:${catColor(e.cat)}"></span>
-        <span><div class="d">${esc(e.desc)}</div><div class="m">${meta || esc(e.cat)}${e.ref ? ` <span class="proof">${proofIcon}Ref</span>` : ''}</div></span>
+        <span><div class="d">${esc(e.desc)}</div><div class="m">${meta || esc(e.cat)}${e.ref ? ` <span class="proof">${proofIcon}Ref</span>` : ''}${e.receipt ? ` <span class="shot" data-shot="${esc(e.id)}">${shotIcon}Receipt</span>` : ''}</div></span>
         <span class="a num">${fmt2(e.amount)}</span></button>`;
     }).join('') + '</div>').join('');
 }
@@ -824,16 +964,99 @@ function openEntry(id, pre) {
   $('#fPaidBy').innerHTML = `<option value="agent">${esc(agentName())} (from money sent)</option><option value="self">Me directly</option>`;
   $('#fPaidBy').value = e.paidBy === 'self' ? 'self' : 'agent';
   fillStages($('#fStage'), e.stage || '');
+  setReceiptUI(e.receipt || null);
   $('#formErr').textContent = ''; amountHint();
   $('#payeeList').innerHTML = [...new Set(state.entries.map(x => x.payee).filter(Boolean))].map(p => `<option value="${esc(p)}">`).join('');
   $('#dlgEntry').showModal();
   if (!id) setTimeout(() => $('#fAmount').focus(), 50);
 }
+/* What the contract says for the selected stage, as a reference only. It never fills the amount box. */
+function stageHint(v) {
+  const sid = $('#fStage').value, s = sid ? STAGE_BY_ID.get(sid) : null;
+  if (!s || !contractSet()) return '';
+  const others = sum(state.entries.filter(e => e.stage === sid && e.id !== editingId));
+  let due;
+  if (s.rate) due = stageAmount(s);
+  else { const base = sum(state.entries.filter(e => !e.stage && e.id !== editingId)); due = base * contract().cm / 100; }
+  const left = due - others;
+  if (!isFinite(v)) return `Contract: PKR ${fmt(due)}` + (others > 0 ? `, PKR ${fmt(others)} already recorded, PKR ${fmt(left)} left` : '');
+  const d = v - left;
+  return Math.abs(d) < 1 ? `matches the contract` : d > 0 ? `PKR ${fmt(d)} above the contract's ${fmt(left)}` : `PKR ${fmt(-d)} below the contract's ${fmt(left)}`;
+}
 function amountHint() {
   const raw = $('#fAmount').value, v = parseAmount(raw);
-  $('#amountHint').textContent = !raw ? 'You can type 52k, 1.6m or 2 lakh' : isFinite(v) ? `PKR ${fmt2(v)}` : 'Use digits, optionally ending in k, lakh, m or crore';
+  const typed = raw && isFinite(v);
+  const base = !raw ? 'You can type 52k, 1.6m or 2 lakh' : typed ? `PKR ${fmt2(v)}` : 'Use digits, optionally ending in k, lakh, m or crore';
+  const sh = stageHint(typed ? v : NaN);
+  $('#amountHint').textContent = !sh ? base : typed ? `${base} — ${sh}` : sh;
 }
 $('#fAmount').addEventListener('input', amountHint);
+$('#fStage').addEventListener('change', amountHint);
+
+/* Receipt controls inside the entry sheet. pendingShot holds a newly picked image until the expense is saved. */
+let formReceipt = null, pendingShot = null;
+async function setReceiptUI(r) {
+  formReceipt = r || null; pendingShot = null;
+  $('#rcptBusy').hidden = true;
+  const have = $('#rcptHave'), others = allReceipts().filter(x => !formReceipt || x.id !== formReceipt.id);
+  if (!formReceipt) {
+    have.hidden = true; $('#rcptAdd').hidden = false; $('#rcptCover').hidden = true;
+    $('#rcptPick').hidden = !others.length; $('#rcptThumb').removeAttribute('src'); return;
+  }
+  $('#rcptAdd').hidden = true; $('#rcptPick').hidden = true; have.hidden = false;
+  $('#rcptName').textContent = formReceipt.name || 'Receipt';
+  $('#rcptSize').textContent = formReceipt.bytes ? kb(formReceipt.bytes) : '';
+  const shared = receiptUsers(formReceipt.id, editingId);
+  $('#rcptCover').hidden = !shared.length;
+  if (shared.length) $('#rcptCover').textContent =
+    `Also covers ${shared.length} other payment${shared.length === 1 ? '' : 's'} totalling PKR ${fmt(shared.reduce((t, e) => t + e.amount, 0))}`;
+  const data = pendingShot || await shotGet(formReceipt.id);
+  if (data) $('#rcptThumb').src = data;
+  else { $('#rcptThumb').removeAttribute('src'); $('#rcptSize').textContent = 'Not on this device yet — it arrives on the next sync'; }
+}
+$('#rcptPick').addEventListener('click', async () => {
+  const list = allReceipts().filter(x => !formReceipt || x.id !== formReceipt.id);
+  const rows = await Promise.all(list.map(async r => {
+    const d = await shotGet(r.id);
+    return `<button type="button" class="pick" data-pick="${esc(r.id)}">
+      ${d ? `<img src="${d}" alt="">` : '<img alt="">'}
+      <span><span class="d">${esc(r.name || 'Receipt')}</span>
+      <span class="m">${r.uses} payment${r.uses === 1 ? '' : 's'} · PKR ${fmt(r.total)} · ${nice(r.last)}</span></span></button>`;
+  }));
+  $('#pickList').innerHTML = rows.join('') || '<p class="hint">No receipts added yet.</p>';
+  $('#dlgPick').showModal();
+});
+$('#pickList').addEventListener('click', ev => {
+  const b = ev.target.closest('[data-pick]'); if (!b) return;
+  const r = allReceipts().find(x => x.id === b.dataset.pick); if (!r) return;
+  $('#dlgPick').close();
+  setReceiptUI({id: r.id, name: r.name, bytes: r.bytes, w: r.w, h: r.h, created: r.created});
+});
+$('#rcptAdd').addEventListener('click', () => $('#shotIn').click());
+$('#shotIn').addEventListener('change', async ev => {
+  const f = ev.target.files[0]; ev.target.value = ''; if (!f) return;
+  $('#rcptBusy').hidden = false; $('#rcptBusy').textContent = 'Compressing...';
+  try {
+    const {dataUrl, w, h} = await compressImage(f);
+    pendingShot = dataUrl;
+    formReceipt = {id: uid(), name: f.name || 'Receipt', bytes: shotBytes(dataUrl), w, h, created: Date.now()};
+    $('#rcptAdd').hidden = true; $('#rcptHave').hidden = false;
+    $('#rcptThumb').src = dataUrl; $('#rcptName').textContent = formReceipt.name;
+    $('#rcptSize').textContent = kb(formReceipt.bytes) + ' after compression';
+    $('#rcptBusy').hidden = true;
+  } catch (e) { $('#rcptBusy').textContent = e.message; }
+});
+/* Only unlink here. The image is freed on save, and only if no other payment still points at it. */
+$('#rcptRemove').addEventListener('click', () => setReceiptUI(null));
+$('#rcptThumb').addEventListener('click', () => { const s = $('#rcptThumb').getAttribute('src'); if (s) openShot(s, formReceipt && formReceipt.name); });
+function openShot(src, name) { $('#shotImg').src = src; $('#shotTitle').textContent = name || 'Receipt'; $('#dlgShot').showModal(); }
+async function openShotFor(entryId) {
+  const e = state.entries.find(x => x.id === entryId);
+  if (!e || !e.receipt) return;
+  const data = await shotGet(e.receipt.id);
+  if (data) openShot(data, [e.receipt.name || 'Receipt', coverNote(e.receipt.id)].filter(Boolean).join(' — '));
+  else toast('That receipt has not reached this device yet. Sync and try again.');
+}
 $('#entryForm').addEventListener('submit', ev => {
   ev.preventDefault();
   const amount = parseAmount($('#fAmount').value), desc = $('#fDesc').value.trim(), date = $('#fDate').value;
@@ -842,18 +1065,25 @@ $('#entryForm').addEventListener('submit', ev => {
   if (err) { $('#formErr').textContent = err; return; }
   const rec = {id: editingId || uid(), updated: Date.now(), date, desc, amount, cat: $('#fCat').value, payee: $('#fPayee').value.trim(),
     method: $('#fMethod').value, ref: $('#fRef').value.trim(), note: $('#fNote').value.trim(), paidBy: $('#fPaidBy').value,
-    stage: $('#fStage').value || ''};
+    stage: $('#fStage').value || '', receipt: formReceipt || undefined};
   if (qty) { rec.qty = qty; rec.unit = $('#fUnit').value.trim(); }
   const i = state.entries.findIndex(x => x.id === editingId);
+  const oldR = i >= 0 ? state.entries[i].receipt : null;
+  if (pendingShot && formReceipt) shotPut(formReceipt.id, pendingShot).catch(() => toast('Receipt could not be stored on this device'));
   if (i >= 0) state.entries[i] = {...state.entries[i], ...rec, qty: rec.qty, unit: rec.unit};
   else state.entries.push({...rec, created: Date.now()});
+  if (oldR && (!formReceipt || formReceipt.id !== oldR.id)) releaseReceipt(oldR.id, null);
+  pendingShot = null;
   save(); $('#dlgEntry').close(); render();
   toast(i >= 0 ? 'Changes saved' : `Saved PKR ${fmt2(amount)}`);
 });
 $('#btnDelete').addEventListener('click', () => {
   const e = state.entries.find(x => x.id === editingId); if (!e) return;
   if (!confirm(`Delete "${e.desc}" (PKR ${fmt2(e.amount)})?`)) return;
-  state.entries = state.entries.filter(x => x.id !== editingId); state.deleted[editingId] = Date.now(); save(); $('#dlgEntry').close(); render(); toast('Expense deleted');
+  const gone = e.receipt ? e.receipt.id : null;
+  state.entries = state.entries.filter(x => x.id !== editingId); state.deleted[editingId] = Date.now();
+  if (gone) releaseReceipt(gone, null);
+  save(); $('#dlgEntry').close(); render(); toast('Expense deleted');
 });
 
 /* ---------- Money sent ---------- */
@@ -1053,7 +1283,8 @@ function buildPdf(rows, periodLabel, items, mats, funds, range, stages) {
     sorted.forEach(e => { if (!groups.has(e.date)) groups.set(e.date, []); groups.get(e.date).push(e); });
     groups.forEach((es, d) => {
       es.forEach((e, i) => body.push([i === 0 ? nice(d) : '', e.desc + (e.qty ? ` (${fmt2(e.qty)} ${e.unit || ''})`.replace(' )', ')') : '') + (e.note ? `\n${e.note}` : ''),
-        e.cat || '', [e.payee, e.method].filter(Boolean).join('\n'), e.ref || '', fmt2(e.amount)]));
+        e.cat || '', [e.payee, e.method].filter(Boolean).join('\n'),
+        [e.ref || '', e.receipt ? (receiptUsers(e.receipt.id, null).length > 1 ? 'Receipt on file (shared transfer)' : 'Receipt on file') : ''].filter(Boolean).join('\n'), fmt2(e.amount)]));
       body.push([{content: `Total for ${nice(d)}`, colSpan: 5, styles: {fontStyle: 'bold', halign: 'right', fillColor: [246, 246, 243]}},
         {content: fmt2(sum(es)), styles: {fontStyle: 'bold', halign: 'right', fillColor: [246, 246, 243]}}]);
     });
@@ -1113,17 +1344,19 @@ $('#menuForm').addEventListener('submit', ev => {
     extraCats: $('#sCats').value.split(',').map(s => s.trim()).filter(Boolean), agent: $('#sAgent').value.trim(), contract: con, updated: Date.now()});
   save(); $('#dlgMenu').close(); render(); toast('Settings saved');
 });
-$('#btnExport').addEventListener('click', () => {
-  const data = {...payload(state), exported: new Date().toISOString()};
+$('#btnExport').addEventListener('click', async () => {
+  const shots = {};
+  for (const e of state.entries) if (e.receipt && e.receipt.id) { const d = await shotGet(e.receipt.id); if (d) shots[e.receipt.id] = d; }
+  const data = {...payload(state), shots, exported: new Date().toISOString()};
   deliver(new Blob([JSON.stringify(data, null, 1)], {type: 'application/json'}), `${(state.settings.project || 'project').replace(/[^\w-]+/g, '-')}-backup-${today()}.json`, 'application/json');
 });
 $('#btnCsv').addEventListener('click', () => {
   const q = v => `"${String(v ?? '').replace(/"/g, '""')}"`;
   const stName = id => { const s = STAGE_BY_ID.get(id); return s ? (s.floor ? `${FLOOR_LABEL[s.floor]}: ${s.name}` : `Commission: ${s.name}`) : ''; };
-  const rows = [...state.entries.map(e => ['Expense', e.date, e.desc, e.cat, e.amount, e.qty ?? '', e.unit ?? '', e.payee, e.paidBy === 'self' ? 'Me' : agentName(), e.method, e.ref, e.note, '', stName(e.stage)]),
-    ...state.transfers.map(t => ['Money sent', t.date, `Money sent to ${agentName()}`, '', t.amount, '', '', agentName(), 'Me', t.method, t.ref, t.note, t.aed ?? '', ''])]
+  const rows = [...state.entries.map(e => ['Expense', e.date, e.desc, e.cat, e.amount, e.qty ?? '', e.unit ?? '', e.payee, e.paidBy === 'self' ? 'Me' : agentName(), e.method, e.ref, e.note, '', stName(e.stage), e.receipt ? 'Yes' : '']),
+    ...state.transfers.map(t => ['Money sent', t.date, `Money sent to ${agentName()}`, '', t.amount, '', '', agentName(), 'Me', t.method, t.ref, t.note, t.aed ?? '', '', ''])]
     .sort((a, b) => a[1].localeCompare(b[1]));
-  const lines = [['Type', 'Date', 'Description', 'Category', 'Amount (PKR)', 'Quantity', 'Unit', 'Paid to', 'Paid by', 'Method', 'Reference', 'Note', 'AED sent', 'Contract stage'].map(q).join(',')]
+  const lines = [['Type', 'Date', 'Description', 'Category', 'Amount (PKR)', 'Quantity', 'Unit', 'Paid to', 'Paid by', 'Method', 'Reference', 'Note', 'AED sent', 'Contract stage', 'Receipt'].map(q).join(',')]
     .concat(rows.map(r => r.map(q).join(',')));
   deliver(new Blob(['\ufeff' + lines.join('\r\n')], {type: 'text/csv'}), `${(state.settings.project || 'project').replace(/[^\w-]+/g, '-')}-${today()}.csv`, 'text/csv');
 });
@@ -1131,8 +1364,12 @@ $('#btnImport').addEventListener('click', () => $('#fileIn').click());
 $('#fileIn').addEventListener('change', async ev => {
   const f = ev.target.files[0]; ev.target.value = ''; if (!f) return;
   try {
-    const data = normalise(JSON.parse(await f.text()));
+    const raw = JSON.parse(await f.text());
+    const data = normalise(raw);
     if (!data.entries.length && !data.transfers.length) throw new Error('no entries found');
+    if (raw.shots && typeof raw.shots === 'object') {
+      for (const k in raw.shots) { if (String(raw.shots[k]).startsWith('data:image')) { try { await shotPut(k, raw.shots[k]); } catch (e) {} } }
+    }
     const ids = new Set(state.entries.map(e => e.id));
     const added = data.entries.filter(e => !ids.has(e.id)).length, updated = data.entries.length - added;
     if ((state.entries.length || state.transfers.length) && !confirm(`Import ${data.entries.length} expenses and ${data.transfers.length} money-sent records? ${added} new, ${updated} will replace matching entries. Your other entries stay.`)) return;
@@ -1148,6 +1385,7 @@ $('#btnWipe').addEventListener('click', () => {
   const hadSync = !!sync.gistId;
   if (!confirm(hadSync ? 'Erase all data on this device and disconnect sync? Your data stays safe in GitHub and comes back when you reconnect.' : 'Erase every expense and money-sent record on this device? Export a backup first if you might need it.')) return;
   if (prompt('Type ERASE to confirm') !== 'ERASE') return;
+  shotKeys().then(ks => ks.forEach(k => shotDel(k)));
   state = normalise({}); sync = {}; saveSync(); writeLocal(); $('#dlgMenu').close(); render(); toast(hadSync ? 'Erased on this device. Your GitHub copy is untouched.' : 'All data erased');
 });
 
@@ -1182,13 +1420,50 @@ async function gh(path, opts = {}) {
   if (!r.ok) throw new Error(r.status === 401 ? 'GitHub did not accept the token' : r.status === 403 ? 'Token is missing the gist permission' : r.status === 404 ? 'Sync file not found on GitHub' : 'GitHub error ' + r.status);
   return r.json();
 }
+let lastGistFiles = {};
 async function readGist(id) {
   const g = await gh('/gists/' + id), f = g.files && g.files[GFILE];
   if (!f) throw new Error('Sync file not found on GitHub');
+  lastGistFiles = g.files || {};
   const text = f.truncated ? await (await fetch(f.raw_url, {cache: 'no-store'})).text() : f.content;
   return normalise(JSON.parse(text));
 }
-const writeGist = (id, d) => gh('/gists/' + id, {method: 'PATCH', body: JSON.stringify({files: {[GFILE]: {content: JSON.stringify(payload(d))}}})});
+const writeGist = (id, d, extra) => gh('/gists/' + id, {method: 'PATCH',
+  body: JSON.stringify({files: Object.assign({[GFILE]: {content: JSON.stringify(payload(d))}}, extra || {})})});
+
+/* Receipts travel as their own gist files, so a sync only moves the ones that are new.
+   Every step is best-effort: a receipt that fails must never stop the ledger itself from syncing. */
+const RFILE = id => 'receipt-' + id + '.txt';
+async function syncReceipts(gistId, merged, remoteFiles) {
+  const seen = new Map();
+  merged.entries.forEach(e => { if (e.receipt && e.receipt.id && !seen.has(e.receipt.id)) seen.set(e.receipt.id, e.receipt); });
+  const wanted = [...seen.values()];   // one file per image, however many payments share it
+  const here = new Set(await shotKeys());
+  const pull = wanted.filter(r => !here.has(r.id) && remoteFiles[RFILE(r.id)]);
+  const push = wanted.filter(r => here.has(r.id) && !remoteFiles[RFILE(r.id)]);
+  for (const r of pull) {
+    try {
+      const f = remoteFiles[RFILE(r.id)];
+      const data = f.truncated || !f.content ? await (await fetch(f.raw_url, {cache: 'no-store'})).text() : f.content;
+      if (data && data.startsWith('data:image')) await shotPut(r.id, data.trim());
+    } catch (e) { /* try again next sync */ }
+  }
+  if (push.length) {
+    const files = {};
+    for (const r of push) { const d = await shotGet(r.id); if (d) files[RFILE(r.id)] = {content: d}; }
+    if (Object.keys(files).length) { try { await writeGist(gistId, merged, files); } catch (e) { /* try again next sync */ } }
+  }
+  /* Drop files for receipts that were deleted on some device. */
+  const live = new Set(wanted.map(r => RFILE(r.id)));
+  const stale = Object.keys(remoteFiles).filter(n => /^receipt-.+\.txt$/.test(n) && !live.has(n));
+  if (stale.length) {
+    const del = {}; stale.forEach(n => { del[n] = null; });
+    try { await writeGist(gistId, merged, del); } catch (e) {}
+  }
+  const orphan = [...here].filter(id => !wanted.some(r => r.id === id));
+  for (const id of orphan) await shotDel(id);
+  return pull.length;
+}
 async function findGist() {
   for (let p = 1; p <= 10; p++) {
     const list = await gh(`/gists?per_page=100&page=${p}`);
@@ -1209,8 +1484,11 @@ async function syncNow(manual) {
     const merged = mergeData(state, remote), cm = canon(merged);
     if (cm !== canon(state)) { state = merged; writeLocal(); render(); }
     if (cm !== canon(remote)) await writeGist(sync.gistId, merged);
+    let pulled = 0;
+    try { pulled = await syncReceipts(sync.gistId, merged, lastGistFiles); } catch (e) {}
+    if (pulled) render();
     sync.last = Date.now(); sync.error = ''; saveSync(); syncState = '';
-    if (manual) toast('Synced');
+    if (manual) toast(pulled ? `Synced, ${pulled} receipt${pulled === 1 ? '' : 's'} downloaded` : 'Synced');
   } catch (e) {
     sync.error = e.message; saveSync(); syncState = '';
     if (manual) toast('Sync failed: ' + e.message);
@@ -1245,6 +1523,7 @@ $('#btnConnect').addEventListener('click', async () => {
       id = g.id; msg = 'Connected. Your data is now saved to GitHub.';
     }
     sync.gistId = id; sync.last = Date.now(); sync.error = ''; saveSync();
+    try { await syncReceipts(id, state, lastGistFiles); } catch (e) {}
     $('#syncToken').value = ''; render(); renderSyncBox(); renderSyncLine(); toast(msg);
   } catch (e) { sync = {}; saveSync(); $('#syncErr').textContent = e.message; }
   finally { btn.disabled = false; btn.textContent = 'Connect'; }
@@ -1265,8 +1544,12 @@ document.querySelectorAll('dialog').forEach(d => d.addEventListener('click', e =
 $('#btnAdd').onclick = () => view === 'funds' ? openTransfer() : openEntry();
 $('#btnReport').onclick = openReport;
 $('#btnMenu').onclick = openMenu;
-$('#list').addEventListener('click', e => { const r = e.target.closest('.row'); if (r) openEntry(r.dataset.id); });
-$('#chips').addEventListener('click', e => { const c = e.target.closest('.chip'); if (!c) return; filterCat = c.dataset.cat; renderChips(); renderLedger(); });
+$('#list').addEventListener('click', e => {
+  const s = e.target.closest('[data-shot]');
+  if (s) { e.stopPropagation(); openShotFor(s.dataset.shot); return; }
+  const r = e.target.closest('.row'); if (r) openEntry(r.dataset.id);
+});
+$('#chips').addEventListener('click', e => { const c = e.target.closest('.chip'); if (!c) return; filterCat = c.dataset.cat; filterStage = ''; renderChips(); renderLedger(); });
 $('#q').addEventListener('input', e => { query = e.target.value; renderLedger(); });
 function setView(v) {
   view = v;
@@ -1280,7 +1563,7 @@ $('#tabBreak').onclick = () => setView('break'); $('#tabFunds').onclick = () => 
 $('#hero').addEventListener('click', e => { if (e.target.closest('#tape')) setView('break'); });
 render(); renderSyncLine(); syncNow(false);
 if ('serviceWorker' in navigator && location.protocol.startsWith('http')) navigator.serviceWorker.register('sw.js').catch(() => {});
-window.__ledger = {state: () => state, parseAmount, mergeData, canon};
+window.__ledger = {state: () => state, parseAmount, mergeData, canon, syncReceipts, shotGet, shotKeys, compressImage};
 })();
 </script>
 </body>
