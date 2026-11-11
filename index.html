@@ -404,6 +404,24 @@ table.mini td.sub{font-size:.8rem;color:var(--muted)}
         <option>Cash</option><option>Other</option></select></label>
       <label class="f">Reference<input id="tRef" placeholder="Optional" autocomplete="off"></label>
     </div>
+    <div class="rcpt">
+      <span class="lab">Bank transfer receipt</span>
+      <button type="button" class="add" id="trcAdd">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9a2 2 0 0 1 2-2h2l1.6-2h6.8L17 7h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><circle cx="12" cy="13" r="3.4"/></svg>
+        <span>Add a photo or screenshot</span>
+      </button>
+      <button type="button" class="add" id="trcPick" hidden>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h10l2 2h4v9a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2z"/><path d="M8 4h8"/></svg>
+        <span>Link a receipt already added</span>
+      </button>
+      <div class="cover" id="trcCover" hidden></div>
+      <div class="have" id="trcHave" hidden>
+        <img id="trcThumb" alt="Receipt">
+        <span class="meta"><b id="trcName"></b><span id="trcSize"></span></span>
+        <button type="button" id="trcRemove">Remove</button>
+      </div>
+      <div class="busy" id="trcBusy" hidden></div>
+    </div>
     <label class="f">Note<textarea id="tNote" placeholder="Optional"></textarea></label>
     <div class="hint" id="tErr" style="color:var(--danger)"></div>
     <div class="actions">
@@ -436,18 +454,37 @@ table.mini td.sub{font-size:.8rem;color:var(--muted)}
         <label class="f">First floor (sq ft)<input id="sFf" inputmode="decimal" autocomplete="off" placeholder="0"></label>
       </div>
       <div class="hint num" id="contractHint"></div>
+      <p style="margin-top:12px">Categories that count as material for the commission</p>
+      <div class="checks" id="sMatCats"></div>
+      <div class="hint num" id="matHint"></div>
     </div>
     <div class="syncbox" id="syncBox">
       <h3>Sync across devices</h3>
       <div id="syncOff">
         <p>Paste your GitHub token (gist scope) to keep the same data on your iPhone, iPad and Mac. Do this once on each device.</p>
         <label class="f" style="margin-top:8px">GitHub token<input id="syncToken" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="ghp_..."></label>
+        <label class="f">Passphrase, only if you have set one<input id="syncPass" type="password" autocomplete="off" placeholder="Leave empty otherwise"></label>
         <div class="hint" id="syncErr" style="color:var(--danger)"></div>
         <div class="actions"><button type="button" class="btn primary" id="btnConnect">Connect</button></div>
       </div>
       <div id="syncOn" hidden>
         <p id="syncInfo"></p>
         <div class="actions"><button type="button" class="btn" id="btnDisconnect">Disconnect this device</button><button type="button" class="btn primary" id="btnSyncNow">Sync now</button></div>
+        <div id="encOff" hidden>
+          <p style="margin-top:14px">Protect the GitHub copy with a passphrase. Without one, anyone who gets the link to your sync file can read the ledger and the receipts.</p>
+          <label class="f" style="margin-top:8px">New passphrase<input id="encPass" type="password" autocomplete="new-password" placeholder="At least 8 characters"></label>
+          <label class="f">Repeat passphrase<input id="encPass2" type="password" autocomplete="new-password"></label>
+          <div class="hint" id="encErr" style="color:var(--danger)"></div>
+          <div class="actions"><button type="button" class="btn" id="btnEncOn">Turn on protection</button></div>
+          <div class="hint">Update the app on every device first. Each device then asks for the passphrase once. If you forget it, your devices keep their data, but a new device cannot read the GitHub copy.</div>
+        </div>
+        <div id="encLocked" hidden>
+          <p style="margin-top:14px">This ledger is protected. Enter the passphrase to sync on this device.</p>
+          <label class="f" style="margin-top:8px">Passphrase<input id="unlockPass" type="password" autocomplete="off"></label>
+          <div class="hint" id="unlockErr" style="color:var(--danger)"></div>
+          <div class="actions"><button type="button" class="btn primary" id="btnUnlock">Unlock</button></div>
+        </div>
+        <div class="hint" id="encOn" hidden>Protected with your passphrase. The ledger and receipts on GitHub are encrypted.</div>
       </div>
     </div>
     <div class="menu-list" style="margin-top:14px">
@@ -626,10 +663,12 @@ function compressImage(file) {
 }
 /* One bank transfer often covers several line items, so a receipt may be linked to many expenses.
    The image is stored once under its id; entries point at it. */
-const receiptUsers = (rid, exceptId) => state.entries.filter(e => e.receipt && e.receipt.id === rid && e.id !== exceptId);
+const holders = () => state.entries.concat(state.transfers);
+const isExpense = h => state.entries.includes(h);
+const receiptUsers = (rid, exceptId) => holders().filter(e => e.receipt && e.receipt.id === rid && e.id !== exceptId);
 function allReceipts() {
   const m = new Map();
-  state.entries.forEach(e => {
+  holders().forEach(e => {
     if (!e.receipt || !e.receipt.id) return;
     const o = m.get(e.receipt.id) || {...e.receipt, uses: 0, total: 0, last: ''};
     o.uses++; o.total += e.amount; if (e.date > o.last) o.last = e.date;
@@ -637,14 +676,19 @@ function allReceipts() {
   });
   return [...m.values()].sort((a, b) => b.last.localeCompare(a.last));
 }
-/* Free the image only once nothing points at it any more. */
+const wantedReceipts = () => allReceipts().map(r => r.id);
+/* Free the image only once nothing points at it any more. The tombstone lets other devices drop their copy,
+   and the queue removes the copy on GitHub at the next sync. */
 function releaseReceipt(rid, exceptId) {
   if (!rid || receiptUsers(rid, exceptId).length) return;
   shotDel(rid); state.deleted['r:' + rid] = Date.now();
+  if (sync.up) delete sync.up[rid];
+  sync.rdel = [...new Set([...(sync.rdel || []), rid])]; saveSync();
 }
 const coverNote = rid => {
   const u = receiptUsers(rid, null);
-  return u.length > 1 ? `Covers ${u.length} payments totalling PKR ${fmt(u.reduce((t, e) => t + e.amount, 0))}` : '';
+  if (u.length < 2) return '';
+  return u.every(isExpense) ? `Covers ${u.length} payments totalling PKR ${fmt(u.reduce((t, e) => t + e.amount, 0))}` : `Linked to ${u.length} records`;
 };
 
 const shotBytes = d => Math.round((String(d || '').split(',')[1] || '').length * 0.75);
@@ -664,7 +708,13 @@ function stageAmount(s, C) {
 }
 const stagePaid = id => sum(state.entries.filter(e => e.stage === id));
 /* Material base for the commission: everything not tagged to a labour stage or a commission tranche. */
-const materialBase = () => sum(state.entries.filter(e => !e.stage));
+/* The 4% is owed on material only, so the base is limited to the categories ticked in settings. */
+const DEFAULT_MAT = ['Aggregates & blocks', 'Cement', 'Steel', 'Electrical', 'Plumbing', 'Wood & doors', 'Finishes'];
+function matCats() {
+  const m = (state.settings.contract || {}).matCats;
+  return new Set(Array.isArray(m) ? m : DEFAULT_MAT);
+}
+const materialBase = exceptId => { const M = matCats(); return sum(state.entries.filter(e => !e.stage && M.has(e.cat) && e.id !== exceptId)); };
 function stageTotals() {
   const C = contract(), rows = STAGES.map(s => {
     const amount = stageAmount(s, C), paid = stagePaid(s.id);
@@ -722,7 +772,7 @@ function renderStages() {
   }).join('');
   const bal = T.cmDue - T.cmPaid, base = materialBase();
   $('#cmCard').innerHTML = `<table class="mini num"><tr><th>Item</th><th class="r">PKR</th></tr>
-    <tr><td>Material and site spend recorded<div class="sub">Every expense not tagged to a labour stage</div></td><td class="r">${fmt(base)}</td></tr>
+    <tr><td>Material bought so far<div class="sub">${esc([...matCats()].join(', ') || 'No categories ticked')}. Change this in settings</div></td><td class="r">${fmt(base)}</td></tr>
     <tr><td>${fmt2(C.cm)}% of that, due to the contractor</td><td class="r">${fmt(T.cmDue)}</td></tr>
     <tr><td>Commission paid so far</td><td class="r">${fmt(T.cmPaid)}</td></tr>
     <tr><td><b>Still owed</b></td><td class="r"><b class="${bal < 0 ? 'negc' : ''}">${signed(bal)}</b></td></tr></table>
@@ -876,7 +926,7 @@ function renderFunds() {
   }
   const ts = [...state.transfers].sort(byDateDesc);
   $('#tlist').innerHTML = ts.length ? ts.map(t => `<button class="row" data-tid="${esc(t.id)}"><span class="sw" style="background:var(--ok)"></span>
-      <span><div class="d">${niceDay(t.date)} ${t.date.slice(0, 4)}</div><div class="m">${esc([t.method, t.aed ? `AED ${fmt2(t.aed)} at ${(t.amount / t.aed).toFixed(2)}` : '', t.ref, t.note].filter(Boolean).join(', ') || 'Money sent')}</div></span>
+      <span><div class="d">${niceDay(t.date)} ${t.date.slice(0, 4)}</div><div class="m">${esc([t.method, t.aed ? `AED ${fmt2(t.aed)} at ${(t.amount / t.aed).toFixed(2)}` : '', t.ref, t.note].filter(Boolean).join(', ') || 'Money sent')}${t.receipt ? ` <span class="shot" data-shot="${esc(t.id)}">${shotIcon}Receipt</span>` : ''}</div></span>
       <span class="a num pos">+${fmt2(t.amount)}</span></button>`).join('')
     : `<div class="empty"><p>No money sent recorded yet. Tap Record money sent.</p></div>`;
   const rows = statementRows().reverse();
@@ -964,7 +1014,7 @@ function openEntry(id, pre) {
   $('#fPaidBy').innerHTML = `<option value="agent">${esc(agentName())} (from money sent)</option><option value="self">Me directly</option>`;
   $('#fPaidBy').value = e.paidBy === 'self' ? 'self' : 'agent';
   fillStages($('#fStage'), e.stage || '');
-  setReceiptUI(e.receipt || null);
+  entryBox.set(e.receipt || null);
   $('#formErr').textContent = ''; amountHint();
   $('#payeeList').innerHTML = [...new Set(state.entries.map(x => x.payee).filter(Boolean))].map(p => `<option value="${esc(p)}">`).join('');
   $('#dlgEntry').showModal();
@@ -977,7 +1027,7 @@ function stageHint(v) {
   const others = sum(state.entries.filter(e => e.stage === sid && e.id !== editingId));
   let due;
   if (s.rate) due = stageAmount(s);
-  else { const base = sum(state.entries.filter(e => !e.stage && e.id !== editingId)); due = base * contract().cm / 100; }
+  else due = materialBase(editingId) * contract().cm / 100;
   const left = due - others;
   if (!isFinite(v)) return `Contract: PKR ${fmt(due)}` + (others > 0 ? `, PKR ${fmt(others)} already recorded, PKR ${fmt(left)} left` : '');
   const d = v - left;
@@ -993,65 +1043,80 @@ function amountHint() {
 $('#fAmount').addEventListener('input', amountHint);
 $('#fStage').addEventListener('change', amountHint);
 
-/* Receipt controls inside the entry sheet. pendingShot holds a newly picked image until the expense is saved. */
-let formReceipt = null, pendingShot = null;
-async function setReceiptUI(r) {
-  formReceipt = r || null; pendingShot = null;
-  $('#rcptBusy').hidden = true;
-  const have = $('#rcptHave'), others = allReceipts().filter(x => !formReceipt || x.id !== formReceipt.id);
-  if (!formReceipt) {
-    have.hidden = true; $('#rcptAdd').hidden = false; $('#rcptCover').hidden = true;
-    $('#rcptPick').hidden = !others.length; $('#rcptThumb').removeAttribute('src'); return;
-  }
-  $('#rcptAdd').hidden = true; $('#rcptPick').hidden = true; have.hidden = false;
-  $('#rcptName').textContent = formReceipt.name || 'Receipt';
-  $('#rcptSize').textContent = formReceipt.bytes ? kb(formReceipt.bytes) : '';
-  const shared = receiptUsers(formReceipt.id, editingId);
-  $('#rcptCover').hidden = !shared.length;
-  if (shared.length) $('#rcptCover').textContent =
-    `Also covers ${shared.length} other payment${shared.length === 1 ? '' : 's'} totalling PKR ${fmt(shared.reduce((t, e) => t + e.amount, 0))}`;
-  const data = pendingShot || await shotGet(formReceipt.id);
-  if (data) $('#rcptThumb').src = data;
-  else { $('#rcptThumb').removeAttribute('src'); $('#rcptSize').textContent = 'Not on this device yet — it arrives on the next sync'; }
+/* Receipt controls. One box sits in the expense sheet and one in the money-sent sheet.
+   A newly picked image is held in `pending` until its record is saved. */
+let activeBox = null;
+function receiptBox(p, currentId) {
+  const q = k => $('#' + p + k);
+  const box = {receipt: null, pending: null,
+    async set(r) {
+      box.receipt = r || null; box.pending = null;
+      q('Busy').hidden = true;
+      const others = allReceipts().filter(x => !box.receipt || x.id !== box.receipt.id);
+      if (!box.receipt) {
+        q('Have').hidden = true; q('Add').hidden = false; q('Cover').hidden = true;
+        q('Pick').hidden = !others.length; q('Thumb').removeAttribute('src'); return;
+      }
+      q('Add').hidden = true; q('Pick').hidden = true; q('Have').hidden = false;
+      q('Name').textContent = box.receipt.name || 'Receipt';
+      q('Size').textContent = box.receipt.bytes ? kb(box.receipt.bytes) : '';
+      const shared = receiptUsers(box.receipt.id, currentId());
+      q('Cover').hidden = !shared.length;
+      if (shared.length) q('Cover').textContent = shared.every(isExpense)
+        ? `Also covers ${shared.length} other payment${shared.length === 1 ? '' : 's'} totalling PKR ${fmt(shared.reduce((t, e) => t + e.amount, 0))}`
+        : `Also linked to ${shared.length} other record${shared.length === 1 ? '' : 's'}`;
+      const data = await shotGet(box.receipt.id);
+      if (data) q('Thumb').src = data;
+      else { q('Thumb').removeAttribute('src'); q('Size').textContent = 'Not on this device yet. It arrives on the next sync'; }
+    },
+    async picked(f) {
+      q('Busy').hidden = false; q('Busy').textContent = 'Compressing...';
+      try {
+        const {dataUrl, w, h} = await compressImage(f);
+        box.pending = dataUrl;
+        box.receipt = {id: uid(), name: f.name || 'Receipt', bytes: shotBytes(dataUrl), w, h, created: Date.now()};
+        q('Add').hidden = true; q('Pick').hidden = true; q('Cover').hidden = true; q('Have').hidden = false;
+        q('Thumb').src = dataUrl; q('Name').textContent = box.receipt.name;
+        q('Size').textContent = kb(box.receipt.bytes) + ' after compression';
+        q('Busy').hidden = true;
+      } catch (e) { q('Busy').textContent = e.message; }
+    },
+    /* Call when the record is saved: stores a new image and frees the previous one if nothing else uses it. */
+    commit(oldReceipt) {
+      if (box.pending && box.receipt) shotPut(box.receipt.id, box.pending).catch(() => toast('Receipt could not be stored on this device'));
+      box.pending = null;
+      if (oldReceipt && (!box.receipt || box.receipt.id !== oldReceipt.id)) releaseReceipt(oldReceipt.id, null);
+    }};
+  q('Add').addEventListener('click', () => { activeBox = box; $('#shotIn').click(); });
+  q('Pick').addEventListener('click', async () => {
+    activeBox = box;
+    const rows = await Promise.all(allReceipts().map(async r => {
+      const d = await shotGet(r.id);
+      return `<button type="button" class="pick" data-pick="${esc(r.id)}">
+        ${d ? `<img src="${d}" alt="">` : '<img alt="">'}
+        <span><span class="d">${esc(r.name || 'Receipt')}</span>
+        <span class="m">${r.uses} record${r.uses === 1 ? '' : 's'} · PKR ${fmt(r.total)} · ${nice(r.last)}</span></span></button>`;
+    }));
+    $('#pickList').innerHTML = rows.join('') || '<p class="hint">No receipts added yet.</p>';
+    $('#dlgPick').showModal();
+  });
+  /* Only unlink here. The image is freed on save, and only if no other record still points at it. */
+  q('Remove').addEventListener('click', () => box.set(null));
+  q('Thumb').addEventListener('click', () => { const src = q('Thumb').getAttribute('src'); if (src) openShot(src, box.receipt && box.receipt.name); });
+  return box;
 }
-$('#rcptPick').addEventListener('click', async () => {
-  const list = allReceipts().filter(x => !formReceipt || x.id !== formReceipt.id);
-  const rows = await Promise.all(list.map(async r => {
-    const d = await shotGet(r.id);
-    return `<button type="button" class="pick" data-pick="${esc(r.id)}">
-      ${d ? `<img src="${d}" alt="">` : '<img alt="">'}
-      <span><span class="d">${esc(r.name || 'Receipt')}</span>
-      <span class="m">${r.uses} payment${r.uses === 1 ? '' : 's'} · PKR ${fmt(r.total)} · ${nice(r.last)}</span></span></button>`;
-  }));
-  $('#pickList').innerHTML = rows.join('') || '<p class="hint">No receipts added yet.</p>';
-  $('#dlgPick').showModal();
-});
+const entryBox = receiptBox('rcpt', () => editingId);
+const fundsBox = receiptBox('trc', () => editingT);
+$('#shotIn').addEventListener('change', ev => { const f = ev.target.files[0]; ev.target.value = ''; if (f && activeBox) activeBox.picked(f); });
 $('#pickList').addEventListener('click', ev => {
-  const b = ev.target.closest('[data-pick]'); if (!b) return;
+  const b = ev.target.closest('[data-pick]'); if (!b || !activeBox) return;
   const r = allReceipts().find(x => x.id === b.dataset.pick); if (!r) return;
   $('#dlgPick').close();
-  setReceiptUI({id: r.id, name: r.name, bytes: r.bytes, w: r.w, h: r.h, created: r.created});
+  activeBox.set({id: r.id, name: r.name, bytes: r.bytes, w: r.w, h: r.h, created: r.created});
 });
-$('#rcptAdd').addEventListener('click', () => $('#shotIn').click());
-$('#shotIn').addEventListener('change', async ev => {
-  const f = ev.target.files[0]; ev.target.value = ''; if (!f) return;
-  $('#rcptBusy').hidden = false; $('#rcptBusy').textContent = 'Compressing...';
-  try {
-    const {dataUrl, w, h} = await compressImage(f);
-    pendingShot = dataUrl;
-    formReceipt = {id: uid(), name: f.name || 'Receipt', bytes: shotBytes(dataUrl), w, h, created: Date.now()};
-    $('#rcptAdd').hidden = true; $('#rcptHave').hidden = false;
-    $('#rcptThumb').src = dataUrl; $('#rcptName').textContent = formReceipt.name;
-    $('#rcptSize').textContent = kb(formReceipt.bytes) + ' after compression';
-    $('#rcptBusy').hidden = true;
-  } catch (e) { $('#rcptBusy').textContent = e.message; }
-});
-/* Only unlink here. The image is freed on save, and only if no other payment still points at it. */
-$('#rcptRemove').addEventListener('click', () => setReceiptUI(null));
-$('#rcptThumb').addEventListener('click', () => { const s = $('#rcptThumb').getAttribute('src'); if (s) openShot(s, formReceipt && formReceipt.name); });
 function openShot(src, name) { $('#shotImg').src = src; $('#shotTitle').textContent = name || 'Receipt'; $('#dlgShot').showModal(); }
-async function openShotFor(entryId) {
-  const e = state.entries.find(x => x.id === entryId);
+async function openShotFor(recordId) {
+  const e = holders().find(x => x.id === recordId);
   if (!e || !e.receipt) return;
   const data = await shotGet(e.receipt.id);
   if (data) openShot(data, [e.receipt.name || 'Receipt', coverNote(e.receipt.id)].filter(Boolean).join(' — '));
@@ -1065,15 +1130,13 @@ $('#entryForm').addEventListener('submit', ev => {
   if (err) { $('#formErr').textContent = err; return; }
   const rec = {id: editingId || uid(), updated: Date.now(), date, desc, amount, cat: $('#fCat').value, payee: $('#fPayee').value.trim(),
     method: $('#fMethod').value, ref: $('#fRef').value.trim(), note: $('#fNote').value.trim(), paidBy: $('#fPaidBy').value,
-    stage: $('#fStage').value || '', receipt: formReceipt || undefined};
+    stage: $('#fStage').value || '', receipt: entryBox.receipt || undefined};
   if (qty) { rec.qty = qty; rec.unit = $('#fUnit').value.trim(); }
   const i = state.entries.findIndex(x => x.id === editingId);
   const oldR = i >= 0 ? state.entries[i].receipt : null;
-  if (pendingShot && formReceipt) shotPut(formReceipt.id, pendingShot).catch(() => toast('Receipt could not be stored on this device'));
   if (i >= 0) state.entries[i] = {...state.entries[i], ...rec, qty: rec.qty, unit: rec.unit};
   else state.entries.push({...rec, created: Date.now()});
-  if (oldR && (!formReceipt || formReceipt.id !== oldR.id)) releaseReceipt(oldR.id, null);
-  pendingShot = null;
+  entryBox.commit(oldR);
   save(); $('#dlgEntry').close(); render();
   toast(i >= 0 ? 'Changes saved' : `Saved PKR ${fmt2(amount)}`);
 });
@@ -1097,6 +1160,7 @@ function openTransfer(id) {
   $('#tAmount').value = t.amount ? fmt2(t.amount) : ''; $('#tDate').value = t.date;
   $('#tAed').value = t.aed ? fmt2(t.aed) : ''; $('#tMethod').value = t.method || '';
   $('#tRef').value = t.ref || ''; $('#tNote').value = t.note || ''; $('#tErr').textContent = '';
+  fundsBox.set(t.receipt || null);
   tHint(); $('#dlgFunds').showModal();
   if (!id) setTimeout(() => $('#tAmount').focus(), 50);
 }
@@ -1112,17 +1176,26 @@ $('#fundsForm').addEventListener('submit', ev => {
   const amount = parseAmount($('#tAmount').value), date = $('#tDate').value, aedRaw = $('#tAed').value.trim(), aed = aedRaw ? parseAmount(aedRaw) : 0;
   const err = !(amount > 0) ? 'Enter the PKR amount above zero.' : !date ? 'Pick a date.' : (aedRaw && !(aed > 0)) ? 'AED amount must be a number.' : '';
   if (err) { $('#tErr').textContent = err; return; }
-  const rec = {id: editingT || uid(), updated: Date.now(), date, amount, aed: aed || undefined, method: $('#tMethod').value, ref: $('#tRef').value.trim(), note: $('#tNote').value.trim()};
+  const rec = {id: editingT || uid(), updated: Date.now(), date, amount, aed: aed || undefined, method: $('#tMethod').value, ref: $('#tRef').value.trim(), note: $('#tNote').value.trim(), receipt: fundsBox.receipt || undefined};
   const i = state.transfers.findIndex(x => x.id === editingT);
+  const oldR = i >= 0 ? state.transfers[i].receipt : null;
   if (i >= 0) state.transfers[i] = {...state.transfers[i], ...rec}; else state.transfers.push({...rec, created: Date.now()});
+  fundsBox.commit(oldR);
   save(); $('#dlgFunds').close(); render(); toast(i >= 0 ? 'Changes saved' : `Recorded PKR ${fmt2(amount)} sent`);
 });
 $('#tDelete').addEventListener('click', () => {
   const t = state.transfers.find(x => x.id === editingT); if (!t) return;
   if (!confirm(`Delete money sent on ${nice(t.date)} (PKR ${fmt2(t.amount)})?`)) return;
-  state.transfers = state.transfers.filter(x => x.id !== editingT); state.deleted[editingT] = Date.now(); save(); $('#dlgFunds').close(); render(); toast('Entry deleted');
+  const gone = t.receipt ? t.receipt.id : null;
+  state.transfers = state.transfers.filter(x => x.id !== editingT); state.deleted[editingT] = Date.now();
+  if (gone) releaseReceipt(gone, null);
+  save(); $('#dlgFunds').close(); render(); toast('Entry deleted');
 });
-$('#tlist').addEventListener('click', e => { const r = e.target.closest('[data-tid]'); if (r) openTransfer(r.dataset.tid); });
+$('#tlist').addEventListener('click', e => {
+  const sh = e.target.closest('[data-shot]');
+  if (sh) { e.stopPropagation(); openShotFor(sh.dataset.shot); return; }
+  const r = e.target.closest('[data-tid]'); if (r) openTransfer(r.dataset.tid);
+});
 
 /* ---------- Report ---------- */
 let rSel = new Set();
@@ -1244,7 +1317,7 @@ function buildPdf(rows, periodLabel, items, mats, funds, range, stages) {
     y = doc.lastAutoTable.finalY + 10;
     doc.setFontSize(8); doc.setTextColor(...MUT);
     doc.text(`Measured at ${fmt2(T.C.gf)} sq ft ground floor and ${fmt2(T.C.ff)} sq ft first floor, PKR ${fmt(T.C.rate)} per sq ft.`, M, y);
-    doc.text(`${fmt2(T.C.cm)}% material commission: PKR ${fmt(T.cmDue)} due on PKR ${fmt(materialBase())} of material and site spend, PKR ${fmt(T.cmPaid)} paid.`, M, y + 11);
+    doc.text(`${fmt2(T.C.cm)}% material commission: PKR ${fmt(T.cmDue)} due on PKR ${fmt(materialBase())} of material, PKR ${fmt(T.cmPaid)} paid.`, M, y + 11);
     y += 36;
   }
   if (funds) {
@@ -1322,8 +1395,20 @@ function openMenu() {
   $('#sBudget').value = S.budget ? fmt(S.budget) : ''; $('#sCats').value = (S.extraCats || []).join(', '); $('#sAgent').value = S.agent || '';
   const C = contract();
   $('#sRate').value = C.rate || ''; $('#sCm').value = C.cm; $('#sGf').value = C.gf || ''; $('#sFf').value = C.ff || '';
-  budgetHint(); contractHint(); renderSyncBox(); $('#dlgMenu').showModal();
+  mSel = matCats();
+  $('#sMatCats').innerHTML = categories().map(c => `<button type="button" class="chip" data-mc="${esc(c.n)}" aria-pressed="${mSel.has(c.n)}"><i style="background:${c.c}"></i>${esc(c.n)}</button>`).join('');
+  budgetHint(); contractHint(); matHint(); renderSyncBox(); $('#dlgMenu').showModal();
 }
+let mSel = new Set();
+function matHint() {
+  const base = sum(state.entries.filter(e => !e.stage && mSel.has(e.cat))), cm = parseAmount($('#sCm').value);
+  $('#matHint').textContent = `PKR ${fmt(base)} of material recorded` + (isFinite(cm) ? `, commission PKR ${fmt(base * cm / 100)}` : '');
+}
+$('#sMatCats').addEventListener('click', ev => {
+  const b = ev.target.closest('[data-mc]'); if (!b) return;
+  const n = b.dataset.mc; mSel.has(n) ? mSel.delete(n) : mSel.add(n); b.setAttribute('aria-pressed', mSel.has(n)); matHint();
+});
+$('#sCm').addEventListener('input', matHint);
 function contractHint() {
   const rate = parseAmount($('#sRate').value) || BASE_RATE, gf = parseAmount($('#sGf').value) || 0, ff = parseAmount($('#sFf').value) || 0;
   $('#contractHint').textContent = (gf > 0 || ff > 0)
@@ -1339,14 +1424,14 @@ $('#menuForm').addEventListener('submit', ev => {
   if (!isFinite(b)) { budgetHint(); return; }
   const num = (sel, dflt) => { const raw = $(sel).value.trim(); if (!raw) return dflt; const v = parseAmount(raw); return isFinite(v) ? v : dflt; };
   const C = contract();
-  const con = {rate: num('#sRate', BASE_RATE), cm: num('#sCm', 4), gf: num('#sGf', 0), ff: num('#sFf', 0), done: C.done};
+  const con = {rate: num('#sRate', BASE_RATE), cm: num('#sCm', 4), gf: num('#sGf', 0), ff: num('#sFf', 0), done: C.done, matCats: [...mSel]};
   Object.assign(state.settings, {project: $('#sName').value.trim() || 'Untitled project', subtitle: $('#sSub').value.trim(), budget: b,
     extraCats: $('#sCats').value.split(',').map(s => s.trim()).filter(Boolean), agent: $('#sAgent').value.trim(), contract: con, updated: Date.now()});
   save(); $('#dlgMenu').close(); render(); toast('Settings saved');
 });
 $('#btnExport').addEventListener('click', async () => {
   const shots = {};
-  for (const e of state.entries) if (e.receipt && e.receipt.id) { const d = await shotGet(e.receipt.id); if (d) shots[e.receipt.id] = d; }
+  for (const id of wantedReceipts()) { const d = await shotGet(id); if (d) shots[id] = d; }
   const data = {...payload(state), shots, exported: new Date().toISOString()};
   deliver(new Blob([JSON.stringify(data, null, 1)], {type: 'application/json'}), `${(state.settings.project || 'project').replace(/[^\w-]+/g, '-')}-backup-${today()}.json`, 'application/json');
 });
@@ -1354,7 +1439,7 @@ $('#btnCsv').addEventListener('click', () => {
   const q = v => `"${String(v ?? '').replace(/"/g, '""')}"`;
   const stName = id => { const s = STAGE_BY_ID.get(id); return s ? (s.floor ? `${FLOOR_LABEL[s.floor]}: ${s.name}` : `Commission: ${s.name}`) : ''; };
   const rows = [...state.entries.map(e => ['Expense', e.date, e.desc, e.cat, e.amount, e.qty ?? '', e.unit ?? '', e.payee, e.paidBy === 'self' ? 'Me' : agentName(), e.method, e.ref, e.note, '', stName(e.stage), e.receipt ? 'Yes' : '']),
-    ...state.transfers.map(t => ['Money sent', t.date, `Money sent to ${agentName()}`, '', t.amount, '', '', agentName(), 'Me', t.method, t.ref, t.note, t.aed ?? '', '', ''])]
+    ...state.transfers.map(t => ['Money sent', t.date, `Money sent to ${agentName()}`, '', t.amount, '', '', agentName(), 'Me', t.method, t.ref, t.note, t.aed ?? '', '', t.receipt ? 'Yes' : ''])]
     .sort((a, b) => a[1].localeCompare(b[1]));
   const lines = [['Type', 'Date', 'Description', 'Category', 'Amount (PKR)', 'Quantity', 'Unit', 'Paid to', 'Paid by', 'Method', 'Reference', 'Note', 'AED sent', 'Contract stage', 'Receipt'].map(q).join(',')]
     .concat(rows.map(r => r.map(q).join(',')));
@@ -1390,7 +1475,7 @@ $('#btnWipe').addEventListener('click', () => {
 });
 
 /* ---------- Sync (private GitHub Gist) ---------- */
-const SKEY = 'site-ledger.sync', GFILE = 'site-ledger.json';
+const SKEY = 'site-ledger.sync', GFILE = 'site-ledger.json', POINTER = 'site-ledger-receipts.txt', RMARK = 'site-ledger-receipts.json';
 let sync = (() => { try { return JSON.parse(localStorage.getItem(SKEY)) || {}; } catch (e) { return {}; } })();
 function saveSync() { try { localStorage.setItem(SKEY, JSON.stringify(sync)); } catch (e) {} }
 function payload(d) { return {app: 'site-ledger', version: 2, settings: d.settings, entries: d.entries, transfers: d.transfers, deleted: d.deleted}; }
@@ -1420,49 +1505,129 @@ async function gh(path, opts = {}) {
   if (!r.ok) throw new Error(r.status === 401 ? 'GitHub did not accept the token' : r.status === 403 ? 'Token is missing the gist permission' : r.status === 404 ? 'Sync file not found on GitHub' : 'GitHub error ' + r.status);
   return r.json();
 }
+/* ---- Passphrase protection. The key is derived once per device and kept beside the token;
+        everything written to GitHub (ledger and receipts) is AES-GCM encrypted with it. ---- */
+const enc8 = t => new TextEncoder().encode(t), dec8 = b => new TextDecoder().decode(b);   // created on use, so an old browser still loads the app
+const b64 = buf => { const u = new Uint8Array(buf); let o = ''; for (let i = 0; i < u.length; i += 0x8000) o += String.fromCharCode.apply(null, u.subarray(i, i + 0x8000)); return btoa(o); };
+const unb64 = str => Uint8Array.from(atob(str), c => c.charCodeAt(0));
+const canEncrypt = () => !!(window.crypto && crypto.subtle);
+async function deriveKey(pass, salt) {
+  const base = await crypto.subtle.importKey('raw', enc8(pass), 'PBKDF2', false, ['deriveBits']);
+  return b64(await crypto.subtle.deriveBits({name: 'PBKDF2', hash: 'SHA-256', salt: unb64(salt), iterations: 310000}, base, 256));
+}
+let keyCache = null;
+async function aesKey() {
+  if (!keyCache || keyCache.raw !== sync.key) keyCache = {raw: sync.key, key: await crypto.subtle.importKey('raw', unb64(sync.key), 'AES-GCM', false, ['encrypt', 'decrypt'])};
+  return keyCache.key;
+}
+async function seal(text) {
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  return {iv: b64(iv), ct: b64(await crypto.subtle.encrypt({name: 'AES-GCM', iv}, await aesKey(), enc8(text)))};
+}
+async function unseal(iv, ct) {
+  try { return dec8(await crypto.subtle.decrypt({name: 'AES-GCM', iv: unb64(iv)}, await aesKey(), unb64(ct))); }
+  catch (e) { throw new Error('Wrong passphrase'); }
+}
+async function packMain(d) {
+  const json = JSON.stringify(payload(d));
+  if (!sync.key) return json;
+  const {iv, ct} = await seal(json);
+  return JSON.stringify({app: 'site-ledger', enc: 1, salt: sync.salt, iv, ct});
+}
+async function unpackMain(text) {
+  const o = JSON.parse(text);
+  if (o && o.enc) {
+    if (!sync.key || sync.salt !== o.salt) { const e = new Error('Enter your passphrase in settings to sync'); e.locked = o.salt; throw e; }
+    return {data: normalise(JSON.parse(await unseal(o.iv, o.ct))), enc: true};
+  }
+  return {data: normalise(o), enc: false};
+}
+async function packShot(dataUrl) { if (!sync.key) return dataUrl; const {iv, ct} = await seal(dataUrl); return `enc1:${iv}:${ct}`; }
+async function unpackShot(text) {
+  text = String(text || '').trim();
+  if (text.startsWith('data:image')) return text;
+  if (text.startsWith('enc1:') && sync.key) { const [, iv, ct] = text.split(':'); const d = await unseal(iv, ct); return d.startsWith('data:image') ? d : null; }
+  return null;
+}
+
 let lastGistFiles = {};
+const fileText = async f => (f.truncated || f.content == null) ? (await fetch(f.raw_url, {cache: 'no-store'})).text() : f.content;
 async function readGist(id) {
   const g = await gh('/gists/' + id), f = g.files && g.files[GFILE];
   if (!f) throw new Error('Sync file not found on GitHub');
   lastGistFiles = g.files || {};
-  const text = f.truncated ? await (await fetch(f.raw_url, {cache: 'no-store'})).text() : f.content;
-  return normalise(JSON.parse(text));
+  /* The ledger file says which gist holds the receipts, so every device converges on the same one. */
+  const ptr = lastGistFiles[POINTER] && String(lastGistFiles[POINTER].content || '').trim();
+  if (ptr && ptr !== sync.rGistId) { sync.rGistId = ptr; sync.up = {}; saveSync(); }
+  return unpackMain(await fileText(f));
 }
-const writeGist = (id, d, extra) => gh('/gists/' + id, {method: 'PATCH',
-  body: JSON.stringify({files: Object.assign({[GFILE]: {content: JSON.stringify(payload(d))}}, extra || {})})});
+const patchGist = (id, files) => gh('/gists/' + id, {method: 'PATCH', body: JSON.stringify({files})});
+const writeGist = async (id, d) => patchGist(id, {[GFILE]: {content: await packMain(d)}});
 
-/* Receipts travel as their own gist files, so a sync only moves the ones that are new.
+/* Receipts live in their own gist. It is read only when this device is missing a receipt or has one to
+   remove, and written only when this device has a new one, so an ordinary save moves no images at all.
    Every step is best-effort: a receipt that fails must never stop the ledger itself from syncing. */
 const RFILE = id => 'receipt-' + id + '.txt';
-async function syncReceipts(gistId, merged, remoteFiles) {
-  const seen = new Map();
-  merged.entries.forEach(e => { if (e.receipt && e.receipt.id && !seen.has(e.receipt.id)) seen.set(e.receipt.id, e.receipt); });
-  const wanted = [...seen.values()];   // one file per image, however many payments share it
+const isRFile = n => /^receipt-.+\.txt$/.test(n), rFileId = n => n.slice(8, -4);
+async function syncReceipts(mainId) {
+  const up = sync.up || (sync.up = {});
+  const tomb = id => state.deleted['r:' + id] || 0;
+  let wanted = wantedReceipts();
   const here = new Set(await shotKeys());
-  const pull = wanted.filter(r => !here.has(r.id) && remoteFiles[RFILE(r.id)]);
-  const push = wanted.filter(r => here.has(r.id) && !remoteFiles[RFILE(r.id)]);
-  for (const r of pull) {
+  let pulled = 0;
+
+  /* Receipts the earlier build stored inside the ledger gist: take a copy before they are moved out. */
+  const legacy = Object.keys(lastGistFiles).filter(isRFile);
+  for (const n of legacy) {
+    const id = rFileId(n);
+    if (!wanted.includes(id) || here.has(id)) continue;
+    try { const d = await unpackShot(await fileText(lastGistFiles[n])); if (d) { await shotPut(id, d); here.add(id); pulled++; } } catch (e) {}
+  }
+
+  const push = wanted.filter(id => here.has(id) && !(up[id] > tomb(id)));
+  const pull = wanted.filter(id => !here.has(id));
+  if (!sync.rGistId) sync.rdel = [];                      // nothing was ever uploaded, so nothing to remove
+  const del = (sync.rdel || []).filter(id => !wanted.includes(id));
+  if (push.length || pull.length || del.length) {
     try {
-      const f = remoteFiles[RFILE(r.id)];
-      const data = f.truncated || !f.content ? await (await fetch(f.raw_url, {cache: 'no-store'})).text() : f.content;
-      if (data && data.startsWith('data:image')) await shotPut(r.id, data.trim());
+      if (!sync.rGistId && push.length) {
+        const g = await gh('/gists', {method: 'POST', body: JSON.stringify({description: 'Site Ledger receipts (do not edit by hand)', public: false,
+          files: {[RMARK]: {content: JSON.stringify({app: 'site-ledger-receipts'})}}})});
+        await patchGist(mainId, {[POINTER]: {content: g.id}});
+        sync.rGistId = g.id; saveSync();
+      }
+      const rid = sync.rGistId;
+      if (rid) {
+        for (let i = 0; i < push.length; i += 4) {
+          const files = {}, batch = push.slice(i, i + 4);
+          for (const id of batch) { const d = await shotGet(id); if (d) files[RFILE(id)] = {content: await packShot(d)}; }
+          if (Object.keys(files).length) { await patchGist(rid, files); batch.forEach(id => { if (files[RFILE(id)]) up[id] = Date.now(); }); saveSync(); }
+        }
+        if (pull.length || del.length) {
+          const files = (await gh('/gists/' + rid)).files || {};
+          for (const id of pull) {
+            const f = files[RFILE(id)]; if (!f) continue;
+            try { const d = await unpackShot(await fileText(f)); if (d) { await shotPut(id, d); here.add(id); pulled++; up[id] = Date.now(); } } catch (e) {}
+          }
+          const gone = {}; del.forEach(id => { if (files[RFILE(id)]) gone[RFILE(id)] = null; });
+          if (Object.keys(gone).length) await patchGist(rid, gone);
+          sync.rdel = [];
+          for (const id in up) if (!files[RFILE(id)]) delete up[id];   // GitHub lost it somehow: upload again next time
+        }
+      }
     } catch (e) { /* try again next sync */ }
   }
-  if (push.length) {
-    const files = {};
-    for (const r of push) { const d = await shotGet(r.id); if (d) files[RFILE(r.id)] = {content: d}; }
-    if (Object.keys(files).length) { try { await writeGist(gistId, merged, files); } catch (e) { /* try again next sync */ } }
-  }
-  /* Drop files for receipts that were deleted on some device. */
-  const live = new Set(wanted.map(r => RFILE(r.id)));
-  const stale = Object.keys(remoteFiles).filter(n => /^receipt-.+\.txt$/.test(n) && !live.has(n));
-  if (stale.length) {
-    const del = {}; stale.forEach(n => { del[n] = null; });
-    try { await writeGist(gistId, merged, del); } catch (e) {}
-  }
-  const orphan = [...here].filter(id => !wanted.some(r => r.id === id));
-  for (const id of orphan) await shotDel(id);
-  return pull.length;
+
+  /* Move legacy files out of the ledger gist once they are safely in the receipts gist, or no longer used. */
+  wanted = wantedReceipts();
+  const moved = {}; legacy.forEach(n => { const id = rFileId(n); if (!wanted.includes(id) || up[id]) moved[n] = null; });
+  if (Object.keys(moved).length) { try { await patchGist(mainId, moved); } catch (e) {} }
+
+  /* Local cleanup removes only images whose receipt was deliberately released. An image saved a moment
+     ago, while this sync was running, has no such mark and is never touched. */
+  for (const id of here) if (!wanted.includes(id) && tomb(id)) await shotDel(id);
+  saveSync();
+  return pulled;
 }
 async function findGist() {
   for (let p = 1; p <= 10; p++) {
@@ -1480,17 +1645,17 @@ async function syncNow(manual) {
   if (syncing) { syncAgain = true; return; }
   syncing = true; syncState = 'busy'; renderSyncLine();
   try {
-    const remote = await readGist(sync.gistId);
+    const {data: remote, enc} = await readGist(sync.gistId);
     const merged = mergeData(state, remote), cm = canon(merged);
     if (cm !== canon(state)) { state = merged; writeLocal(); render(); }
-    if (cm !== canon(remote)) await writeGist(sync.gistId, merged);
+    if (cm !== canon(remote) || enc !== !!sync.key) await writeGist(sync.gistId, merged);
     let pulled = 0;
-    try { pulled = await syncReceipts(sync.gistId, merged, lastGistFiles); } catch (e) {}
+    try { pulled = await syncReceipts(sync.gistId); } catch (e) {}
     if (pulled) render();
-    sync.last = Date.now(); sync.error = ''; saveSync(); syncState = '';
+    sync.last = Date.now(); sync.error = ''; sync.locked = ''; saveSync(); syncState = '';
     if (manual) toast(pulled ? `Synced, ${pulled} receipt${pulled === 1 ? '' : 's'} downloaded` : 'Synced');
   } catch (e) {
-    sync.error = e.message; saveSync(); syncState = '';
+    sync.error = e.message; if (e.locked) sync.locked = e.locked; saveSync(); syncState = '';
     if (manual) toast('Sync failed: ' + e.message);
   } finally {
     syncing = false; renderSyncLine(); if ($('#dlgMenu').open) renderSyncBox();
@@ -1505,6 +1670,10 @@ function renderSyncLine() {
 }
 function renderSyncBox() {
   $('#syncOff').hidden = !!sync.gistId; $('#syncOn').hidden = !sync.gistId;
+  const locked = !!sync.locked && sync.salt !== sync.locked;
+  $('#encLocked').hidden = !(sync.gistId && locked);
+  $('#encOff').hidden = !(sync.gistId && !sync.key && !locked && canEncrypt());
+  $('#encOn').hidden = !(sync.gistId && sync.key && !locked);
   $('#syncInfo').textContent = sync.gistId ? (sync.error ? `Connected, but the last sync failed: ${sync.error}.` : `Connected. Last synced ${sync.last ? timeStr(sync.last) : 'never'}.`) + ' Changes sync automatically.' : '';
 }
 $('#btnConnect').addEventListener('click', async () => {
@@ -1514,21 +1683,55 @@ $('#btnConnect').addEventListener('click', async () => {
   try {
     let id = await findGist(), msg;
     if (id) {
-      const remote = await readGist(id), merged = mergeData(state, remote);
+      let r;
+      try { r = await readGist(id); }
+      catch (e) {
+        if (!e.locked) throw e;
+        const pass = $('#syncPass').value;
+        if (!pass) throw new Error('This ledger is protected. Enter its passphrase as well.');
+        sync.salt = e.locked; sync.key = await deriveKey(pass, e.locked);
+        r = await readGist(id);
+      }
+      const merged = mergeData(state, r.data);
       state = merged; writeLocal();
-      if (canon(merged) !== canon(remote)) await writeGist(id, merged);
+      if (canon(merged) !== canon(r.data)) await writeGist(id, merged);
       msg = `Connected. ${merged.entries.length} expenses now on this device.`;
     } else {
-      const g = await gh('/gists', {method: 'POST', body: JSON.stringify({description: 'Site Ledger data (do not edit by hand)', public: false, files: {[GFILE]: {content: JSON.stringify(payload(state))}}})});
+      const g = await gh('/gists', {method: 'POST', body: JSON.stringify({description: 'Site Ledger data (do not edit by hand)', public: false, files: {[GFILE]: {content: await packMain(state)}}})});
       id = g.id; msg = 'Connected. Your data is now saved to GitHub.';
     }
     sync.gistId = id; sync.last = Date.now(); sync.error = ''; saveSync();
-    try { await syncReceipts(id, state, lastGistFiles); } catch (e) {}
-    $('#syncToken').value = ''; render(); renderSyncBox(); renderSyncLine(); toast(msg);
+    try { await syncReceipts(id); } catch (e) {}
+    $('#syncToken').value = ''; $('#syncPass').value = ''; render(); renderSyncBox(); renderSyncLine(); toast(msg);
   } catch (e) { sync = {}; saveSync(); $('#syncErr').textContent = e.message; }
   finally { btn.disabled = false; btn.textContent = 'Connect'; }
 });
 $('#btnSyncNow').addEventListener('click', () => syncNow(true));
+$('#btnEncOn').addEventListener('click', async () => {
+  const a = $('#encPass').value, b = $('#encPass2').value;
+  const err = a.length < 8 ? 'Use at least 8 characters.' : a !== b ? 'The two entries do not match.' : '';
+  $('#encErr').textContent = err; if (err) return;
+  const btn = $('#btnEncOn'); btn.disabled = true; btn.textContent = 'Protecting...';
+  try {
+    const salt = b64(crypto.getRandomValues(new Uint8Array(16)));
+    sync.key = await deriveKey(a, salt); sync.salt = salt; sync.up = {}; saveSync();   // receipts are uploaded again, encrypted
+    $('#encPass').value = ''; $('#encPass2').value = '';
+    await syncNow(true);
+  } catch (e) { $('#encErr').textContent = e.message; }
+  finally { btn.disabled = false; btn.textContent = 'Turn on protection'; renderSyncBox(); }
+});
+$('#btnUnlock').addEventListener('click', async () => {
+  const pass = $('#unlockPass').value; if (!pass) { $('#unlockErr').textContent = 'Enter the passphrase.'; return; }
+  const btn = $('#btnUnlock'); btn.disabled = true; $('#unlockErr').textContent = '';
+  const prev = {key: sync.key, salt: sync.salt};
+  try {
+    sync.salt = sync.locked; sync.key = await deriveKey(pass, sync.locked);
+    await readGist(sync.gistId);                       // proves the passphrase before it is kept
+    sync.locked = ''; sync.up = {}; saveSync(); $('#unlockPass').value = '';
+    await syncNow(true);
+  } catch (e) { sync.key = prev.key; sync.salt = prev.salt; saveSync(); $('#unlockErr').textContent = e.message; }
+  finally { btn.disabled = false; renderSyncBox(); }
+});
 $('#btnDisconnect').addEventListener('click', () => {
   if (!confirm('Stop syncing on this device? Data on this device stays, and your GitHub copy stays.')) return;
   sync = {}; saveSync(); renderSyncBox(); renderSyncLine(); toast('Sync turned off on this device');
@@ -1563,7 +1766,7 @@ $('#tabBreak').onclick = () => setView('break'); $('#tabFunds').onclick = () => 
 $('#hero').addEventListener('click', e => { if (e.target.closest('#tape')) setView('break'); });
 render(); renderSyncLine(); syncNow(false);
 if ('serviceWorker' in navigator && location.protocol.startsWith('http')) navigator.serviceWorker.register('sw.js').catch(() => {});
-window.__ledger = {state: () => state, parseAmount, mergeData, canon, syncReceipts, shotGet, shotKeys, compressImage};
+window.__ledger = {state: () => state, sync: () => sync, parseAmount, mergeData, canon, syncReceipts, syncNow, shotGet, shotPut, shotKeys, compressImage, materialBase, stageTotals};
 })();
 </script>
 </body>
